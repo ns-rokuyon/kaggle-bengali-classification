@@ -1,3 +1,6 @@
 data
 *.pyc
 *.swp
+.vscode
+__pycache__
+*.ipynb

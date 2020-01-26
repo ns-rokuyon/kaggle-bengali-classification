@@ -4,6 +4,8 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+jupyter = "*"
+pylint = "*"
 
 [packages]
 numpy = "*"
@@ -12,6 +14,9 @@ pandas = "*"
 torch = "==1.3.1"
 torchvision = "==0.4.2"
 pillow = "==6.2.1"
+pyarrow = "*"
+tqdm = "*"
+iterative-stratification = "*"
 
 [requires]
 python_version = "3.7"
