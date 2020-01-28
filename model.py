@@ -49,7 +49,6 @@ class MultiHeadClassifier(nn.Module):
         x = self.pool(x)
         x = x.view(x.size(0), -1)
 
-        print(x.shape)
         logit_g = self.head_g(x)
         logit_v = self.head_v(x)
         logit_c = self.head_c(x)
@@ -67,3 +66,12 @@ class BengaliResNet34(nn.Module):
         x = self.backend(x)
         logit_g, logit_v, logit_c = self.multihead(x)
         return logit_g, logit_v, logit_c
+
+
+def create_init_model(arch, **kwargs):
+    if arch == 'BengaliResNet34':
+        model = BengaliResNet34(**kwargs)
+    else:
+        raise ValueError(arch)
+
+    return model
