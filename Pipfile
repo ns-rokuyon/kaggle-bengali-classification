@@ -17,6 +17,7 @@ pillow = "==6.2.1"
 pyarrow = "*"
 tqdm = "*"
 iterative-stratification = "*"
+scikit-learn = "*"
 
 [requires]
 python_version = "3.7"
