@@ -1,7 +1,9 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+import tqdm
 from torch.utils.data.dataloader import DataLoader
 from pathlib import Path
 from argparse import ArgumentParser
@@ -13,6 +15,7 @@ from preprocessing import (
     create_transformer_v1,
     create_testing_transformer_v1
 )
+from evaluation import hierarchical_macro_averaged_recall
 
 
 def parse_args():
@@ -76,6 +79,9 @@ def train(model, train_loader, val_loader,
           logger,
           n_epoch=30):
     for epoch in range(n_epoch):
+        score = evaluate(model, val_loader)
+        logger.info(f'Epoch={epoch}, Score={score}')
+
         model.train()
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
@@ -96,6 +102,37 @@ def train(model, train_loader, val_loader,
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+
+def evaluate(model, val_loader):
+    model.eval()
+
+    pred_g, pred_v, pred_c = [], [], []
+    true_g, true_v, true_c = [], [], []
+    with torch.no_grad():
+        for x, tg, tv, tc in tqdm.tqdm(val_loader):
+            x = x.cuda()
+            logit_g, logit_v, logit_c = model(x)
+            pred_g.append(torch.argmax(logit_g, dim=1).cpu().numpy())
+            pred_v.append(torch.argmax(logit_v, dim=1).cpu().numpy())
+            pred_c.append(torch.argmax(logit_c, dim=1).cpu().numpy())
+            true_g.append(tg.numpy())
+            true_v.append(tv.numpy())
+            true_c.append(tc.numpy())
+
+    pred_g = np.concatenate(pred_g)
+    pred_v = np.concatenate(pred_v)
+    pred_c = np.concatenate(pred_c)
+    true_g = np.concatenate(true_g)
+    true_v = np.concatenate(true_v)
+    true_c = np.concatenate(true_c)
+
+    score = hierarchical_macro_averaged_recall(
+        pred_g, true_g,
+        pred_v, true_v,
+        pred_c, true_c
+    )
+    return score
 
 
 if __name__ == '__main__':

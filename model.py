@@ -37,12 +37,12 @@ class MultiHeadClassifier(nn.Module):
         self.head_v = nn.Sequential(
             nn.BatchNorm1d(in_channel),
             nn.Dropout(0.5),
-            nn.Linear(in_channel, n_grapheme)
+            nn.Linear(in_channel, n_vowel)
         )
         self.head_c = nn.Sequential(
             nn.BatchNorm1d(in_channel),
             nn.Dropout(0.5),
-            nn.Linear(in_channel, n_grapheme)
+            nn.Linear(in_channel, n_consonant)
         )
 
     def forward(self, x):
