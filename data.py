@@ -2,6 +2,7 @@ import numpy as np
 import tqdm
 import pickle
 import logging
+from pathlib import Path
 from PIL import Image
 
 
@@ -26,11 +27,51 @@ def load_kfolds(data_dir):
     return kfolds
 
 
-def get_logger(name):
+def get_logger(name, log_file=None):
     logger = logging.getLogger(name)
     logger.setLevel('DEBUG')
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
     return logger
+
+
+class Workspace:
+    def __init__(self, run_id, root_dir=None):
+        self.run_id = run_id
+        self.root_dir = Path(root_dir or 'workspace')
+        self.logger = None
+
+    def setup(self):
+        self.root_dir.mkdir(parents=True, exist_ok=True)
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+        self.tb_log_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger(__name__, log_file=self.log_file)
+        return self
+
+    @property
+    def model_dir(self):
+        return self.root_dir / 'model' / self.run_id
+
+    @property
+    def tb_log_dir(self):
+        return self.root_dir / 'tb'
+
+    @property
+    def log_dir(self):
+        return self.root_dir / 'log'
+
+    @property
+    def log_file(self):
+        return self.log_dir / f'{self.run_id}.log'
+
+    def log(self, message, epoch=None):
+        if epoch is not None:
+            message = f'Epoch({epoch}): {message}'
+        self.logger.info(message)

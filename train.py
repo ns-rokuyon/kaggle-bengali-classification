@@ -9,7 +9,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 
 from dataset import bengali_dataset
-from data import get_logger
+from data import get_logger, Workspace
 from model import create_init_model
 from preprocessing import (
     create_transformer_v1,
@@ -20,6 +20,8 @@ from evaluation import hierarchical_macro_averaged_recall
 
 def parse_args():
     parser = ArgumentParser()
+    parser.add_argument('--run-id', required=True,
+                        help='Run id')
     parser.add_argument('--data-dir', default='data', type=Path,
                         help='Path to data dir')
     parser.add_argument('--fold-id', default=0, type=int,
@@ -35,9 +37,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    logger = get_logger(__name__)
     data_dir = args.data_dir
     fold_id = args.fold_id
+
+    workspace = Workspace(args.run_id).setup()
+    workspace.log(f'Args: {args}')
 
     torch.cuda.set_device(0)
 
@@ -48,21 +52,22 @@ def main():
                                                  fold_id=fold_id,
                                                  train_transformer=train_transformer,
                                                  val_transformer=val_transformer,
-                                                 logger=logger)
-    logger.info(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
+                                                 logger=workspace.logger)
+    workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
 
     train_loader = DataLoader(train_dataset,
                               batch_size=args.batch_size,
+                              shuffle=True,
                               num_workers=8,
                               pin_memory=True,
                               drop_last=True)
     val_loader = DataLoader(val_dataset,
                             batch_size=args.batch_size,
+                            shuffle=False,
                             num_workers=8,
-                            pin_memory=True,
-                            drop_last=True)
+                            pin_memory=True)
 
-    logger.info(f'Create init model: arch={args.arch}')
+    workspace.log(f'Create init model: arch={args.arch}')
     model = create_init_model(args.arch, pretrained=True)
     model = model.cuda()
 
@@ -70,18 +75,18 @@ def main():
 
     train(model, train_loader, val_loader,
           optimizer,
-          logger,
+          workspace,
           n_epoch=args.n_epoch)
 
 
 def train(model, train_loader, val_loader,
           optimizer: torch.optim.Optimizer,
-          logger,
+          workspace: Workspace,
           n_epoch=30):
-    for epoch in range(n_epoch):
-        score = evaluate(model, val_loader)
-        logger.info(f'Epoch={epoch}, Score={score}')
+    score = evaluate(model, val_loader)
+    workspace.log(f'Score={score}', epoch=0)
 
+    for epoch in range(1, n_epoch + 1):
         model.train()
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
@@ -96,12 +101,15 @@ def train(model, train_loader, val_loader,
             loss = loss_g + loss_v + loss_c
 
             if iteration % 10 == 0:
-                logger.info(f'Iteration={iteration}, Epoch={epoch} '
-                            f'Loss={loss}')
+                workspace.log(f'Iteration={iteration}, Loss={loss}',
+                              epoch=epoch)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+        score = evaluate(model, val_loader)
+        workspace.log(f'Score={score}', epoch=epoch)
 
 
 def evaluate(model, val_loader):
