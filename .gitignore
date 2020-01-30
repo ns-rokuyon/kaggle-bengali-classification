@@ -1,6 +1,7 @@
-data
 *.pyc
 *.swp
+*.ipynb
 .vscode
 __pycache__
-*.ipynb
+data
+workspace
