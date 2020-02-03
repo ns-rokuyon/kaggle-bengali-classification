@@ -2,8 +2,10 @@ import numpy as np
 import tqdm
 import pickle
 import logging
+import torch
 from pathlib import Path
 from PIL import Image
+from torch.utils.tensorboard import SummaryWriter
 
 
 SOURCE_IMAGE_HEIGHT = 137
@@ -46,13 +48,18 @@ class Workspace:
         self.run_id = run_id
         self.root_dir = Path(root_dir or 'workspace')
         self.logger = None
+        self.best_score = 0
+        self.best_epoch = 1
+        self.tb_writer = None
 
     def setup(self):
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.model_dir.mkdir(parents=True, exist_ok=True)
+        self.tb_root_log_dir.mkdir(parents=True, exist_ok=True)
         self.tb_log_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger(__name__, log_file=self.log_file)
+        self.tb_writer = SummaryWriter(log_dir=str(self.tb_log_dir))
         return self
 
     @property
@@ -60,8 +67,12 @@ class Workspace:
         return self.root_dir / 'model' / self.run_id
 
     @property
-    def tb_log_dir(self):
+    def tb_root_log_dir(self):
         return self.root_dir / 'tb'
+
+    @property
+    def tb_log_dir(self):
+        return self.tb_root_log_dir / self.run_id
 
     @property
     def log_dir(self):
@@ -75,3 +86,16 @@ class Workspace:
         if epoch is not None:
             message = f'Epoch({epoch}): {message}'
         self.logger.info(message)
+
+    def save_bestmodel(self, model: torch.nn.Module, epoch: int, score: float):
+        if score >= self.best_score:
+            best_model_path = self.model_dir / f'{self.run_id}_best.model'
+            torch.save(model.state_dict(), best_model_path)
+            self.log('Saved best model', epoch=epoch)
+            self.log(f'Best score {self.best_score} -> {score}', epoch=epoch)
+            self.best_score = score
+            self.best_epoch = epoch
+
+    def plot_score(self, tag, value, global_step):
+        self.tb_writer.add_scalar(tag, value,
+                                  global_step=global_step)

@@ -86,10 +86,14 @@ def train(model, train_loader, val_loader,
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
 
+    global_step = -1
+
     for epoch in range(1, n_epoch + 1):
         model.train()
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
+            global_step += 1
+
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
 
@@ -100,16 +104,22 @@ def train(model, train_loader, val_loader,
 
             loss = loss_g + loss_v + loss_c
 
-            if iteration % 10 == 0:
+            if global_step % 20 == 0:
                 workspace.log(f'Iteration={iteration}, Loss={loss}',
                               epoch=epoch)
+                workspace.plot_score('train/loss', float(loss.item()),
+                                     global_step)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
         score = evaluate(model, val_loader)
+
         workspace.log(f'Score={score}', epoch=epoch)
+        workspace.plot_score('val/score', score, epoch)
+
+        workspace.save_bestmodel(model, epoch, score)
 
 
 def evaluate(model, val_loader):
