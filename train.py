@@ -85,6 +85,7 @@ def train(model, train_loader, val_loader,
           n_epoch=30):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
+    workspace.plot_score('val/score', score, 0)
 
     global_step = -1
 
