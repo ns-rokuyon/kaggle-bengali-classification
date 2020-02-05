@@ -43,6 +43,13 @@ def get_logger(name, log_file=None):
     return logger
 
 
+def get_current_lr(optimizer, head=True):
+    lrs = [g['lr'] for g in optimizer.param_groups]
+    if head:
+        return lrs[0]
+    return lrs
+
+
 class Workspace:
     def __init__(self, run_id, root_dir=None):
         self.run_id = run_id
