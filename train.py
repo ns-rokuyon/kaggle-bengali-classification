@@ -9,13 +9,14 @@ from pathlib import Path
 from argparse import ArgumentParser
 
 from dataset import bengali_dataset
-from data import get_logger, Workspace
+from data import get_logger, Workspace, get_current_lr
 from model import create_init_model
 from preprocessing import (
     create_transformer_v1,
     create_testing_transformer_v1
 )
 from evaluation import hierarchical_macro_averaged_recall
+from optim import CosineLRWithRestarts
 
 
 def parse_args():
@@ -28,10 +29,12 @@ def parse_args():
                         help='Kfold id')
     parser.add_argument('--n-epoch', default=30, type=int,
                         help='Number of epoch')
-    parser.add_argument('--arch', default='BengaliResNet34',
+    parser.add_argument('--arch', default='BengaliSEResNeXt50',
                         help='Networks arch')
     parser.add_argument('--batch-size', default=128, type=int,
                         help='Minibatch size')
+    parser.add_argument('--input-size', default=0, type=int,
+                        help='Input image size')
     return parser.parse_args()
 
 
@@ -45,8 +48,15 @@ def main():
 
     torch.cuda.set_device(0)
 
-    train_transformer = create_transformer_v1()
-    val_transformer = create_testing_transformer_v1()
+    if args.input_size == 0:
+        train_transformer = create_transformer_v1()
+        val_transformer = create_testing_transformer_v1()
+        workspace.log('Input size: default')
+    else:
+        input_size = (args.input_size, args.input_size)
+        train_transformer = create_transformer_v1(input_size=input_size)
+        val_transformer = create_testing_transformer_v1(input_size=input_size)
+        workspace.log(f'Input size: {input_size}')
 
     train_dataset, val_dataset = bengali_dataset(data_dir,
                                                  fold_id=fold_id,
@@ -72,16 +82,22 @@ def main():
     model = model.cuda()
 
     optimizer = torch.optim.Adam(model.parameters())
+    scheduler = CosineLRWithRestarts(
+        optimizer, args.batch_size, len(train_dataset),
+        restart_period=6, t_mult=1.0
+    )
 
     train(model, train_loader, val_loader,
           optimizer,
           workspace,
+          scheduler=scheduler,
           n_epoch=args.n_epoch)
 
 
 def train(model, train_loader, val_loader,
           optimizer: torch.optim.Optimizer,
           workspace: Workspace,
+          scheduler=None,
           n_epoch=30):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
@@ -91,6 +107,10 @@ def train(model, train_loader, val_loader,
 
     for epoch in range(1, n_epoch + 1):
         model.train()
+
+        if scheduler:
+            scheduler.step()
+            workspace.log(f'Scheduler.step()', epoch=epoch)
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
             global_step += 1
@@ -110,10 +130,16 @@ def train(model, train_loader, val_loader,
                               epoch=epoch)
                 workspace.plot_score('train/loss', float(loss.item()),
                                      global_step)
+                workspace.plot_score('train/lr',
+                                     float(get_current_lr(optimizer)),
+                                     global_step)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            if scheduler:
+                scheduler.batch_step()
 
         score = evaluate(model, val_loader)
 
