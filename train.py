@@ -17,6 +17,7 @@ from preprocessing import (
 )
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts
+from loss import get_criterion
 
 
 def parse_args():
@@ -31,10 +32,13 @@ def parse_args():
                         help='Number of epoch')
     parser.add_argument('--arch', default='BengaliSEResNeXt50',
                         help='Networks arch')
-    parser.add_argument('--batch-size', default=128, type=int,
+    parser.add_argument('--batch-size', default=64, type=int,
                         help='Minibatch size')
     parser.add_argument('--input-size', default=0, type=int,
                         help='Input image size')
+    parser.add_argument('--loss-type', default='ce',
+                        choices=('ce', 'ohem'),
+                        help='Loss type')
     return parser.parse_args()
 
 
@@ -81,6 +85,9 @@ def main():
     model = create_init_model(args.arch, pretrained=True)
     model = model.cuda()
 
+    criterion = get_criterion(args.loss_type)
+    workspace.log(f'Loss type: {args.loss_type}')
+
     optimizer = torch.optim.Adam(model.parameters())
     scheduler = CosineLRWithRestarts(
         optimizer, args.batch_size, len(train_dataset),
@@ -89,6 +96,7 @@ def main():
 
     train(model, train_loader, val_loader,
           optimizer,
+          criterion,
           workspace,
           scheduler=scheduler,
           n_epoch=args.n_epoch)
@@ -96,6 +104,7 @@ def main():
 
 def train(model, train_loader, val_loader,
           optimizer: torch.optim.Optimizer,
+          criterion,
           workspace: Workspace,
           scheduler=None,
           n_epoch=30):
@@ -119,9 +128,9 @@ def train(model, train_loader, val_loader,
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
 
             logit_g, logit_v, logit_c = model(x)
-            loss_g = F.cross_entropy(logit_g, tg)
-            loss_v = F.cross_entropy(logit_v, tv)
-            loss_c = F.cross_entropy(logit_c, tc)
+            loss_g = criterion(logit_g, tg)
+            loss_v = criterion(logit_v, tv)
+            loss_c = criterion(logit_c, tc)
 
             loss = loss_g + loss_v + loss_c
 
