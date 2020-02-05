@@ -19,6 +19,7 @@ tqdm = "*"
 iterative-stratification = "*"
 scikit-learn = "*"
 tensorboard = "*"
+pretrainedmodels = "*"
 
 [requires]
 python_version = "3.7"
