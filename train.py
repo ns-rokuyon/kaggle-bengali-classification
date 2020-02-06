@@ -18,6 +18,7 @@ from preprocessing import (
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts
 from loss import get_criterion
+from lib.cutmix import cutmix, cutmix_criterion
 
 
 def parse_args():
@@ -39,6 +40,8 @@ def parse_args():
     parser.add_argument('--loss-type', default='ce',
                         choices=('ce', 'ohem'),
                         help='Loss type')
+    parser.add_argument('--cutmix-prob', default=0.0, type=float,
+                        help='Probability of cutmix')
     return parser.parse_args()
 
 
@@ -99,7 +102,8 @@ def main():
           criterion,
           workspace,
           scheduler=scheduler,
-          n_epoch=args.n_epoch)
+          n_epoch=args.n_epoch,
+          cutmix_prob=args.cutmix_prob)
 
 
 def train(model, train_loader, val_loader,
@@ -107,7 +111,8 @@ def train(model, train_loader, val_loader,
           criterion,
           workspace: Workspace,
           scheduler=None,
-          n_epoch=30):
+          n_epoch=30,
+          cutmix_prob=0):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
     workspace.plot_score('val/score', score, 0)
@@ -123,14 +128,35 @@ def train(model, train_loader, val_loader,
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
             global_step += 1
+            r = np.random.rand(1)
+            use_cutmix = r < cutmix_prob
 
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
 
-            logit_g, logit_v, logit_c = model(x)
-            loss_g = criterion(logit_g, tg)
-            loss_v = criterion(logit_v, tv)
-            loss_c = criterion(logit_c, tc)
+            if use_cutmix:
+                x, rand_index, lam = cutmix(x, beta=1.0)
+                tga, tgb = tg, tg[rand_index]
+                tva, tvb = tv, tv[rand_index]
+                tca, tcb = tc, tc[rand_index]
+
+                logit_g, logit_v, logit_c = model(x)
+
+                loss_g = cutmix_criterion(
+                    logit_g, tga, tgb, lam, criterion=criterion
+                )
+                loss_v = cutmix_criterion(
+                    logit_v, tva, tvb, lam, criterion=criterion
+                )
+                loss_c = cutmix_criterion(
+                    logit_c, tca, tcb, lam, criterion=criterion
+                )
+            else:
+                logit_g, logit_v, logit_c = model(x)
+
+                loss_g = criterion(logit_g, tg)
+                loss_v = criterion(logit_v, tv)
+                loss_c = criterion(logit_c, tc)
 
             loss = loss_g + loss_v + loss_c
 

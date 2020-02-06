@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from lib.cutmix import cutmix_criterion
 
 
 def get_criterion(loss_type, **kwargs):
