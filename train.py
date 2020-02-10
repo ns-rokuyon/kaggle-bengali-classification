@@ -184,14 +184,17 @@ def train(model, train_loader, val_loader,
         workspace.save_bestmodel(model, epoch, score)
 
 
-def evaluate(model, val_loader):
+def evaluate(model, val_loader, device=None):
     model.eval()
 
     pred_g, pred_v, pred_c = [], [], []
     true_g, true_v, true_c = [], [], []
     with torch.no_grad():
         for x, tg, tv, tc in tqdm.tqdm(val_loader):
-            x = x.cuda()
+            if device:
+                x = x.to(device)
+            else:
+                x = x.cuda()
             logit_g, logit_v, logit_c = model(x)
             pred_g.append(torch.argmax(logit_g, dim=1).cpu().numpy())
             pred_v.append(torch.argmax(logit_v, dim=1).cpu().numpy())
