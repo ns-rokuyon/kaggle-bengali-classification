@@ -1,16 +1,17 @@
-run_id: run-7
+run_id: run-8
 
 data_dir: data
 fold_id: 0
 
-arch: BengaliSEResNeXt50
+arch: BengaliSEResNeXt50NS
 
 n_epoch: 30
 batch_size: 96
 input_size: 128
 
-loss_type: ohem   # ce | ohem
+loss_type: ce   # ce | ohem
 pooling_type: gemp   # gap | gemp
 scheduler_type: cosanl   # cosanl | rop
 
 cutmix_prob: 0.5
+feat_dim: 64

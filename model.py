@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -95,6 +96,62 @@ def global_pooling(pooling_type='gap'):
     return pool
 
 
+class MultiHeadCenterClassifier(nn.Module):
+    def __init__(self, in_channel, dim=64,
+                 temperature=0.05,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
+        super().__init__()
+        self.temperature = temperature
+        self.n_grapheme = n_grapheme
+        self.n_vowel = n_vowel
+        self.n_consonant = n_consonant
+        self.pool = global_pooling(pooling_type=pooling)
+
+        self.W_g = torch.nn.Parameter(torch.Tensor(self.n_grapheme, dim))
+        self.W_v = torch.nn.Parameter(torch.Tensor(self.n_vowel, dim))
+        self.W_c = torch.nn.Parameter(torch.Tensor(self.n_consonant, dim))
+
+        stdv = 1.0 / math.sqrt(dim)
+        self.W_g.data.uniform_(-stdv, stdv)
+        self.W_v.data.uniform_(-stdv, stdv)
+        self.W_c.data.uniform_(-stdv, stdv)
+
+        self.head_g = nn.Sequential(
+            nn.Linear(in_channel, dim),
+            nn.BatchNorm1d(dim)
+        )
+        self.head_v = nn.Sequential(
+            nn.Linear(in_channel, dim),
+            nn.BatchNorm1d(dim)
+        )
+        self.head_c = nn.Sequential(
+            nn.Linear(in_channel, dim),
+            nn.BatchNorm1d(dim)
+        )
+
+    def forward(self, x):
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+
+        logit_g = F.linear(
+            F.normalize(self.head_g(x)),
+            F.normalize(self.W_g)
+        ) / self.temperature
+
+        logit_v = F.linear(
+            F.normalize(self.head_v(x)),
+            F.normalize(self.W_v)
+        ) / self.temperature
+
+        logit_c = F.linear(
+            F.normalize(self.head_c(x)),
+            F.normalize(self.W_c)
+        ) / self.temperature
+
+        return logit_g, logit_v, logit_c
+
+
 class MultiHeadClassifier(nn.Module):
     def __init__(self, in_channel,
                  n_grapheme=168, n_vowel=11, n_consonant=7,
@@ -134,7 +191,8 @@ class MultiHeadClassifier(nn.Module):
 class BengaliResNet34(nn.Module):
     def __init__(self,
                  pretrained=True,
-                 pooling='gap'):
+                 pooling='gap',
+                 **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained)
         self.multihead = MultiHeadClassifier(512, pooling=pooling)
@@ -148,7 +206,8 @@ class BengaliResNet34(nn.Module):
 class BengaliSEResNeXt50(nn.Module):
     def __init__(self,
                  pretrained=True,
-                 pooling='gap'):
+                 pooling='gap',
+                 **kwargs):
         super().__init__()
         self.backend = make_backend_se_resnext50_32x4d(pretrained=pretrained)
         self.multihead = MultiHeadClassifier(2048, pooling=pooling)
@@ -159,11 +218,29 @@ class BengaliSEResNeXt50(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class BengaliSEResNeXt50NS(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 dim=64,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_se_resnext50_32x4d(pretrained=pretrained)
+        self.multihead = MultiHeadCenterClassifier(2048, dim=dim, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend.features(x)
+        feat_g, feat_v, feat_c = self.multihead(x)
+        return feat_g, feat_v, feat_c
+
+
 def create_init_model(arch, **kwargs):
     if arch == 'BengaliResNet34':
         model = BengaliResNet34(**kwargs)
     elif arch == 'BengaliSEResNeXt50':
         model = BengaliSEResNeXt50(**kwargs)
+    elif arch == 'BengaliSEResNeXt50NS':
+        model = BengaliSEResNeXt50NS(**kwargs)
     else:
         raise ValueError(arch)
 

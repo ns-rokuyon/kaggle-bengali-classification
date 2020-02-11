@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "1850138fb07c70ae42853eef97c8ecda8f9f268ef369708990ce16a83d28657c"
+            "sha256": "48c149be4b403e866d91b234fda1f8c60e990cf7f9a3d66c3db92ba70c1fbdf3"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -318,6 +318,14 @@
                 "sha256:a8fc3433821140e8f409a9831d13ae5deccd0b033d4744d94b31fea141bdd84c"
             ],
             "version": "==4.0.0"
+        },
+        "pytorch-metric-learning": {
+            "hashes": [
+                "sha256:066d8ee69d24e4b5b35e73797e53b3508d605cd7997dfd312b89b7fed087a93e",
+                "sha256:8fc36b7a3d18d6892842a9cde45813bd47b19f2cd5274f6b3381317ae39fc189"
+            ],
+            "index": "pypi",
+            "version": "==0.9.72"
         },
         "pytz": {
             "hashes": [
@@ -640,10 +648,10 @@
         },
         "jupyter-core": {
             "hashes": [
-                "sha256:464769f7387d7a62a2403d067f1ddc616655b7f77f5d810c0dd62cb54bfd0fb9",
-                "sha256:a183e0ec2e8f6adddf62b0a3fc6a2237e3e0056d381e536d3e7c7ecc3067e244"
+                "sha256:185dfe42800585ca860aa47b5fe0211ee2c33246576d2d664b0b0b8d22aacf3a",
+                "sha256:e91785b8bd7f752711c0c20e5ec6ba0d42178d6321a61396082c55818991caee"
             ],
-            "version": "==4.6.1"
+            "version": "==4.6.2"
         },
         "lazy-object-proxy": {
             "hashes": [

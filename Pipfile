@@ -21,6 +21,7 @@ scikit-learn = "*"
 tensorboard = "*"
 pretrainedmodels = "*"
 pyyaml = "*"
+pytorch-metric-learning = "*"
 
 [requires]
 python_version = "3.7"

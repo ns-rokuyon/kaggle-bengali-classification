@@ -8,6 +8,7 @@ from torch.utils.data.dataloader import DataLoader
 from pathlib import Path
 from argparse import ArgumentParser
 
+import loss as L
 from dataset import bengali_dataset
 from data import get_logger, Workspace, get_current_lr
 from model import create_init_model
@@ -74,7 +75,8 @@ def main():
     workspace.log(f'Create init model: arch={conf.arch}')
     model = create_init_model(conf.arch,
                               pretrained=True,
-                              pooling=conf.pooling_type)
+                              pooling=conf.pooling_type,
+                              dim=conf.feat_dim)
     model = model.cuda()
 
     criterion = get_criterion(conf.loss_type)
@@ -131,7 +133,13 @@ def train(model, train_loader, val_loader,
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
 
-            if use_cutmix:
+            if isinstance(criterion, (L.BengaliNormalizedSoftmaxLoss,)):
+                feat_g, feat_v, feat_c = model(x)
+                loss_g, loss_v, loss_c = criterion(
+                    feat_g, feat_v, feat_c,
+                    tg, tv, tc
+                )
+            elif use_cutmix:
                 x, rand_index, lam = cutmix(x, beta=1.0)
                 tga, tgb = tg, tg[rand_index]
                 tva, tvb = tv, tv[rand_index]
