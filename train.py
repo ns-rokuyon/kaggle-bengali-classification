@@ -40,6 +40,9 @@ def parse_args():
     parser.add_argument('--loss-type', default='ce',
                         choices=('ce', 'ohem'),
                         help='Loss type')
+    parser.add_argument('--pooling-type', default='gap',
+                        choices=('gap', 'gemp'),
+                        help='Global pooling type')
     parser.add_argument('--cutmix-prob', default=0.0, type=float,
                         help='Probability of cutmix')
     return parser.parse_args()
@@ -85,7 +88,9 @@ def main():
                             pin_memory=True)
 
     workspace.log(f'Create init model: arch={args.arch}')
-    model = create_init_model(args.arch, pretrained=True)
+    model = create_init_model(args.arch,
+                              pretrained=True,
+                              pooling=args.pooling_type)
     model = model.cuda()
 
     criterion = get_criterion(args.loss_type)
