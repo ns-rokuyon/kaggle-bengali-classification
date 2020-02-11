@@ -28,29 +28,36 @@ def bengali_dataset(data_dir, fold_id=0,
     kfolds = load_kfolds(data_dir)
 
     if logger:
-        logger.info('Concat image_dfs')
+        logger.info('Concat image_dfs ...')
     image_df = pd.concat(image_dfs).reset_index(drop=True)
 
+    image_ids = image_df.iloc[:, 0].values
+    images = image_df.iloc[:, 1:].values
+
     train_ids, val_ids = kfolds[fold_id]
-    train_dataset = BengaliSubsetDataset(df, image_df, train_ids,
+
+    if logger:
+        logger.info('Create datasets ...')
+    train_dataset = BengaliSubsetDataset(df, image_ids, images, train_ids,
                                          transformer=train_transformer)
-    val_dataset = BengaliSubsetDataset(df, image_df, val_ids,
+    val_dataset = BengaliSubsetDataset(df, image_ids, images, val_ids,
                                        transformer=val_transformer)
     return train_dataset, val_dataset
 
 
 class BengaliDataset(Dataset):
-    def __init__(self, df, image_df, transformer=None):
+    def __init__(self, df, image_ids, images, transformer=None):
         self.df = df
-        self.image_df = image_df
+        self.images = images
+        self.ids = image_ids
         self.transformer = transformer
-        assert len(self.df) == len(self.image_df)
+        assert len(self.df) == len(self.images)
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, i):
-        _, im = read_image(self.image_df, i, to_pil=True)
+        _, im = read_image(self, i, to_pil=True)
         if self.transformer:
             im = self.transformer(im)
         labels = self.get_multilabels(i)
@@ -65,9 +72,9 @@ class BengaliDataset(Dataset):
 
 
 class BengaliSubsetDataset(BengaliDataset):
-    def __init__(self, df, image_dfs, active_ids,
+    def __init__(self, df, image_ids, images, active_ids,
                  transformer=None):
-        super().__init__(df, image_dfs, transformer=transformer)
+        super().__init__(df, image_ids, images, transformer=transformer)
         self.active_ids = active_ids
 
     def __len__(self):

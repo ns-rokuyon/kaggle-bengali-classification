@@ -12,8 +12,17 @@ SOURCE_IMAGE_HEIGHT = 137
 SOURCE_IMAGE_WIDTH = 236
 
 
+def read_image(dataset, i, to_pil=True):
+    """Read an image in dataframe as grayscale PIL image
+    """
+    image_id = dataset.ids[i]
+    image = dataset.images[i, :].reshape(137, 236).astype(np.uint8)
+    if to_pil:
+        return image_id, Image.fromarray(image, 'L')
+    return image_id, image
 
-def read_image(df, i, to_pil=True):
+
+def read_image_df(df, i, to_pil=True):
     """Read an image in dataframe as grayscale PIL image
     """
     image_id = df.iloc[i, 0]
