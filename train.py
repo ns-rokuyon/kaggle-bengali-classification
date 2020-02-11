@@ -18,52 +18,36 @@ from preprocessing import (
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts
 from loss import get_criterion
+from config import Config
 from lib.cutmix import cutmix, cutmix_criterion
 
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('--run-id', required=True,
-                        help='Run id')
-    parser.add_argument('--data-dir', default='data', type=Path,
-                        help='Path to data dir')
-    parser.add_argument('--fold-id', default=0, type=int,
-                        help='Kfold id')
-    parser.add_argument('--n-epoch', default=30, type=int,
-                        help='Number of epoch')
-    parser.add_argument('--arch', default='BengaliSEResNeXt50',
-                        help='Networks arch')
-    parser.add_argument('--batch-size', default=64, type=int,
-                        help='Minibatch size')
-    parser.add_argument('--input-size', default=0, type=int,
-                        help='Input image size')
-    parser.add_argument('--loss-type', default='ce',
-                        choices=('ce', 'ohem'),
-                        help='Loss type')
-    parser.add_argument('--pooling-type', default='gap',
-                        choices=('gap', 'gemp'),
-                        help='Global pooling type')
-    parser.add_argument('--cutmix-prob', default=0.0, type=float,
-                        help='Probability of cutmix')
+    parser.add_argument('-c', '--conf', required=True, type=Path,
+                        help='Path to config file')
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    data_dir = args.data_dir
-    fold_id = args.fold_id
+    conf = Config(args.config)
 
-    workspace = Workspace(args.run_id).setup()
-    workspace.log(f'Args: {args}')
+    data_dir = conf.data_dir
+    fold_id = conf.fold_id
+
+    workspace = Workspace(conf.run_id).setup()
+    workspace.save_conf(args.config_file)
+    workspace.log(f'{conf.to_dict()}')
 
     torch.cuda.set_device(0)
 
-    if args.input_size == 0:
+    if conf.input_size == 0:
         train_transformer = create_transformer_v1()
         val_transformer = create_testing_transformer_v1()
         workspace.log('Input size: default')
     else:
-        input_size = (args.input_size, args.input_size)
+        input_size = (conf.input_size, conf.input_size)
         train_transformer = create_transformer_v1(input_size=input_size)
         val_transformer = create_testing_transformer_v1(input_size=input_size)
         workspace.log(f'Input size: {input_size}')
@@ -76,39 +60,47 @@ def main():
     workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
 
     train_loader = DataLoader(train_dataset,
-                              batch_size=args.batch_size,
+                              batch_size=conf.batch_size,
                               shuffle=True,
                               num_workers=8,
                               pin_memory=True,
                               drop_last=True)
     val_loader = DataLoader(val_dataset,
-                            batch_size=args.batch_size,
+                            batch_size=conf.batch_size,
                             shuffle=False,
                             num_workers=8,
                             pin_memory=True)
 
-    workspace.log(f'Create init model: arch={args.arch}')
-    model = create_init_model(args.arch,
+    workspace.log(f'Create init model: arch={conf.arch}')
+    model = create_init_model(conf.arch,
                               pretrained=True,
-                              pooling=args.pooling_type)
+                              pooling=conf.pooling_type)
     model = model.cuda()
 
-    criterion = get_criterion(args.loss_type)
-    workspace.log(f'Loss type: {args.loss_type}')
+    criterion = get_criterion(conf.loss_type)
+    workspace.log(f'Loss type: {conf.loss_type}')
 
     optimizer = torch.optim.Adam(model.parameters())
-    scheduler = CosineLRWithRestarts(
-        optimizer, args.batch_size, len(train_dataset),
-        restart_period=6, t_mult=1.0
-    )
+    if conf.scheduler_type == 'cosanl':
+        scheduler = CosineLRWithRestarts(
+            optimizer, conf.batch_size, len(train_dataset),
+            restart_period=6, t_mult=1.0
+        )
+    elif conf.scheduler_type == 'rop':
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, patience=4, mode='max',
+            factor=0.1, min_lr=1e-8, verbose=True
+        )
+    else:
+        raise ValueError(conf.scheduler_type)
 
     train(model, train_loader, val_loader,
           optimizer,
           criterion,
           workspace,
           scheduler=scheduler,
-          n_epoch=args.n_epoch,
-          cutmix_prob=args.cutmix_prob)
+          n_epoch=conf.n_epoch,
+          cutmix_prob=conf.cutmix_prob)
 
 
 def train(model, train_loader, val_loader,

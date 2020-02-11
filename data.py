@@ -3,6 +3,7 @@ import tqdm
 import pickle
 import logging
 import torch
+import shutil
 from pathlib import Path
 from PIL import Image
 from torch.utils.tensorboard import SummaryWriter
@@ -71,6 +72,7 @@ class Workspace:
     def setup(self):
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.model_dir.mkdir(parents=True, exist_ok=True)
+        self.conf_dir.mkdir(parents=True, exist_ok=True)
         self.tb_root_log_dir.mkdir(parents=True, exist_ok=True)
         self.tb_log_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -81,6 +83,14 @@ class Workspace:
     @property
     def model_dir(self):
         return self.root_dir / 'model' / self.run_id
+
+    @property
+    def conf_dir(self):
+        return self.root_dir / 'conf'
+
+    @property
+    def conf_file(self):
+        return self.conf_dir / f'{self.run_id}.yaml'
 
     @property
     def tb_root_log_dir(self):
@@ -102,6 +112,9 @@ class Workspace:
         if epoch is not None:
             message = f'Epoch({epoch}): {message}'
         self.logger.info(message)
+
+    def save_conf(self, config_file: Path):
+        shutil.copy(config_file, self.conf_file)
 
     def save_bestmodel(self, model: torch.nn.Module, epoch: int, score: float):
         if score >= self.best_score:
