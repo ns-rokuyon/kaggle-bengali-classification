@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import pretrainedmodels
 from torchvision.models import resnet34, resnet50
 
@@ -62,13 +63,47 @@ def make_backend_se_resnext101_32x4d(pretrained=True):
     return model
 
 
+def gemp(x, p=3, eps=1e-6):
+    return F.avg_pool2d(
+        x.clamp(min=eps).pow(p),
+        (x.size(-2), x.size(-1))
+    ).pow(1./p)
+
+
+class GeMP(nn.Module):
+    def __init__(self, p=3, eps=1e-6):
+        super().__init__()
+        self.p = nn.Parameter(torch.ones(1) * p)
+        self.eps = eps
+
+    def forward(self, x):
+        return gemp(x, p=self.p, eps=self.eps)
+        
+    def __repr__(self):
+        return self.__class__.__name__ + \
+            '(' + 'p=' + '{:.4f}'.format(self.p.data.tolist()[0]) + \
+            ', ' + 'eps=' + str(self.eps) + ')'
+
+
+def global_pooling(pooling_type='gap'):
+    if pooling_type == 'gap':
+        pool = nn.AdaptiveAvgPool2d(1)
+    elif pooling_type == 'gemp':
+        pool = GeMP(p=3)
+    else:
+        raise ValueError(f'Invalid pooling: {pooling_type}')
+    return pool
+
+
 class MultiHeadClassifier(nn.Module):
-    def __init__(self, in_channel, n_grapheme=168, n_vowel=11, n_consonant=7):
+    def __init__(self, in_channel,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
         super().__init__()
         self.n_grapheme = n_grapheme
         self.n_vowel = n_vowel
         self.n_consonant = n_consonant
-        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.pool = global_pooling(pooling_type=pooling)
         self.head_g = nn.Sequential(
             nn.BatchNorm1d(in_channel),
             nn.Dropout(0.5),
@@ -97,10 +132,12 @@ class MultiHeadClassifier(nn.Module):
         
 
 class BengaliResNet34(nn.Module):
-    def __init__(self, pretrained=True):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap'):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained)
-        self.multihead = MultiHeadClassifier(512)
+        self.multihead = MultiHeadClassifier(512, pooling=pooling)
 
     def forward(self, x):
         x = self.backend(x)
@@ -109,10 +146,12 @@ class BengaliResNet34(nn.Module):
 
 
 class BengaliSEResNeXt50(nn.Module):
-    def __init__(self, pretrained=True):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap'):
         super().__init__()
         self.backend = make_backend_se_resnext50_32x4d(pretrained=pretrained)
-        self.multihead = MultiHeadClassifier(2048)
+        self.multihead = MultiHeadClassifier(2048, pooling=pooling)
 
     def forward(self, x):
         x = self.backend.features(x)
