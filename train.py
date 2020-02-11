@@ -31,13 +31,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-    conf = Config(args.config)
+    conf = Config(args.conf)
 
     data_dir = conf.data_dir
     fold_id = conf.fold_id
 
     workspace = Workspace(conf.run_id).setup()
-    workspace.save_conf(args.config_file)
+    workspace.save_conf(args.conf)
     workspace.log(f'{conf.to_dict()}')
 
     torch.cuda.set_device(0)
