@@ -133,13 +133,7 @@ def train(model, train_loader, val_loader,
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
 
-            if isinstance(criterion, (L.BengaliNormalizedSoftmaxLoss,)):
-                feat_g, feat_v, feat_c = model(x)
-                loss_g, loss_v, loss_c = criterion(
-                    feat_g, feat_v, feat_c,
-                    tg, tv, tc
-                )
-            elif use_cutmix:
+            if use_cutmix:
                 x, rand_index, lam = cutmix(x, beta=1.0)
                 tga, tgb = tg, tg[rand_index]
                 tva, tvb = tv, tv[rand_index]
