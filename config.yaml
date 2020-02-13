@@ -1,4 +1,4 @@
-run_id: run-11
+run_id: run-12
 
 data_dir: data
 fold_id: 0
@@ -12,6 +12,8 @@ input_size: 128
 loss_type: ce   # ce | ohem
 pooling_type: gap   # gap | gemp
 scheduler_type: rop   # cosanl | rop
+augmentor_type: v1    # v1
 
+use_augmentor: true
 cutmix_prob: 0
 feat_dim: 512

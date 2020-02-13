@@ -14,7 +14,8 @@ from data import get_logger, Workspace, get_current_lr
 from model import create_init_model
 from preprocessing import (
     create_transformer_v1,
-    create_testing_transformer_v1
+    create_testing_transformer_v1,
+    create_augmentor_v1
 )
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts
@@ -43,13 +44,20 @@ def main():
 
     torch.cuda.set_device(0)
 
+    if conf.use_augmentor:
+        augmentor = create_augmentor_v1()
+        workspace.log(f'Use augmentor: {conf.augmentor_type}')
+    else:
+        augmentor = None
+
     if conf.input_size == 0:
-        train_transformer = create_transformer_v1()
+        train_transformer = create_transformer_v1(augmentor=augmentor)
         val_transformer = create_testing_transformer_v1()
         workspace.log('Input size: default')
     else:
         input_size = (conf.input_size, conf.input_size)
-        train_transformer = create_transformer_v1(input_size=input_size)
+        train_transformer = create_transformer_v1(input_size=input_size,
+                                                  augmentor=augmentor)
         val_transformer = create_testing_transformer_v1(input_size=input_size)
         workspace.log(f'Input size: {input_size}')
 
@@ -90,8 +98,8 @@ def main():
         )
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, patience=3, mode='max',
-            factor=0.1, min_lr=1e-8, verbose=True
+            optimizer, patience=2, mode='max',
+            factor=0.1, min_lr=1e-7, verbose=True
         )
     else:
         raise ValueError(conf.scheduler_type)

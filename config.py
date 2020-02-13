@@ -13,6 +13,8 @@ defs = {
     'loss_type': (str, 'ce'),   # ce | ohem
     'pooling_type': (str, 'gap'),   # gap | gemp
     'scheduler_type': (str, 'cosanl'),  # cosanl | rop
+    'augmentor_type': (str, 'v1'),  # v1
+    'use_augmentor': (bool, False),
     'cutmix_prob': (float, 0.0),
     'feat_dim': (int, 64)
 }

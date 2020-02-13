@@ -22,6 +22,7 @@ tensorboard = "*"
 pretrainedmodels = "*"
 pyyaml = "*"
 pytorch-metric-learning = "*"
+albumentations = "*"
 
 [requires]
 python_version = "3.7"
