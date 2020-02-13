@@ -90,7 +90,7 @@ def main():
         )
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, patience=4, mode='max',
+            optimizer, patience=3, mode='max',
             factor=0.1, min_lr=1e-8, verbose=True
         )
     else:
@@ -122,7 +122,10 @@ def train(model, train_loader, val_loader,
         model.train()
 
         if scheduler:
-            scheduler.step()
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(score)
+            else:
+                scheduler.step()
             workspace.log(f'Scheduler.step()', epoch=epoch)
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
@@ -172,7 +175,7 @@ def train(model, train_loader, val_loader,
             loss.backward()
             optimizer.step()
 
-            if scheduler:
+            if isinstance(scheduler, CosineLRWithRestarts):
                 scheduler.batch_step()
 
         score = evaluate(model, val_loader)

@@ -1,4 +1,4 @@
-run_id: run-8
+run_id: run-11
 
 data_dir: data
 fold_id: 0
@@ -10,8 +10,8 @@ batch_size: 96
 input_size: 128
 
 loss_type: ce   # ce | ohem
-pooling_type: gemp   # gap | gemp
-scheduler_type: cosanl   # cosanl | rop
+pooling_type: gap   # gap | gemp
+scheduler_type: rop   # cosanl | rop
 
-cutmix_prob: 0.5
-feat_dim: 64
+cutmix_prob: 0
+feat_dim: 512

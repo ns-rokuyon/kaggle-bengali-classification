@@ -152,6 +152,56 @@ class MultiHeadCenterClassifier(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class MultiHeadCenterClassifier2(nn.Module):
+    def __init__(self, in_channel, dim=64,
+                 temperature=0.05,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
+        super().__init__()
+        self.temperature = temperature
+        self.n_grapheme = n_grapheme
+        self.n_vowel = n_vowel
+        self.n_consonant = n_consonant
+        self.pool = global_pooling(pooling_type=pooling)
+
+        self.W_g = torch.nn.Parameter(torch.Tensor(self.n_grapheme, dim))
+        self.W_v = torch.nn.Parameter(torch.Tensor(self.n_vowel, dim))
+        self.W_c = torch.nn.Parameter(torch.Tensor(self.n_consonant, dim))
+
+        stdv = 1.0 / math.sqrt(dim)
+        self.W_g.data.uniform_(-stdv, stdv)
+        self.W_v.data.uniform_(-stdv, stdv)
+        self.W_c.data.uniform_(-stdv, stdv)
+
+        self.head = nn.Sequential(
+            nn.Linear(in_channel, dim),
+            nn.BatchNorm1d(dim)
+        )
+
+    def forward(self, x):
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+
+        x = self.head(x)
+
+        logit_g = F.linear(
+            F.normalize(x),
+            F.normalize(self.W_g)
+        ) / self.temperature
+
+        logit_v = F.linear(
+            F.normalize(x),
+            F.normalize(self.W_v)
+        ) / self.temperature
+
+        logit_c = F.linear(
+            F.normalize(x),
+            F.normalize(self.W_c)
+        ) / self.temperature
+
+        return logit_g, logit_v, logit_c
+
+
 class MultiHeadClassifier(nn.Module):
     def __init__(self, in_channel,
                  n_grapheme=168, n_vowel=11, n_consonant=7,
@@ -226,7 +276,7 @@ class BengaliSEResNeXt50NS(nn.Module):
                  **kwargs):
         super().__init__()
         self.backend = make_backend_se_resnext50_32x4d(pretrained=pretrained)
-        self.multihead = MultiHeadCenterClassifier(2048, dim=dim, pooling=pooling)
+        self.multihead = MultiHeadCenterClassifier2(2048, dim=dim, pooling=pooling)
 
     def forward(self, x):
         x = self.backend.features(x)
