@@ -1,18 +1,20 @@
-run_id: run-12
+run_id: run-13
 
 data_dir: data
 fold_id: 0
 
 arch: BengaliSEResNeXt50NS
 
-n_epoch: 30
+n_epoch: 50
 batch_size: 96
+n_iter_per_epoch: 1700
 input_size: 128
 
 loss_type: ce   # ce | ohem
 pooling_type: gap   # gap | gemp
 scheduler_type: rop   # cosanl | rop
 augmentor_type: v1    # v1
+sampler_type: pk
 
 use_augmentor: true
 cutmix_prob: 0

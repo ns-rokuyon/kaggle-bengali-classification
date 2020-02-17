@@ -7,6 +7,7 @@ defs = {
     'data_dir': (Path, 'data'),
     'fold_id': (int, 0),
     'n_epoch': (int, 30),
+    'n_iter_per_epoch': (int, 1600),
     'arch': (str, 'BengaliSEResNeXt50'),
     'batch_size': (int, 64),
     'input_size': (int, 128),
@@ -14,6 +15,7 @@ defs = {
     'pooling_type': (str, 'gap'),   # gap | gemp
     'scheduler_type': (str, 'cosanl'),  # cosanl | rop
     'augmentor_type': (str, 'v1'),  # v1
+    'sampler_type': (str, 'random'),    # random | pk
     'use_augmentor': (bool, False),
     'cutmix_prob': (float, 0.0),
     'feat_dim': (int, 64)

@@ -83,3 +83,6 @@ class BengaliSubsetDataset(BengaliDataset):
     def __getitem__(self, i):
         j = self.active_ids[i]
         return super().__getitem__(j)
+
+    def get_grapheme_root_labels(self):
+        return self.df.grapheme_root[self.active_ids]

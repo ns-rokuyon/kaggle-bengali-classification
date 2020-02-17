@@ -20,6 +20,7 @@ from preprocessing import (
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts
 from loss import get_criterion
+from sampler import PKSampler
 from config import Config
 from lib.cutmix import cutmix, cutmix_criterion
 
@@ -68,12 +69,27 @@ def main():
                                                  logger=workspace.logger)
     workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
 
-    train_loader = DataLoader(train_dataset,
-                              batch_size=conf.batch_size,
-                              shuffle=True,
-                              num_workers=8,
-                              pin_memory=True,
-                              drop_last=True)
+    if conf.sampler_type == 'pk':
+        sampler = PKSampler(train_dataset,
+                            n_iter_per_epoch=conf.n_iter_per_epoch,
+                            p=24, k=4)
+        train_loader = DataLoader(train_dataset,
+                                  shuffle=False,
+                                  num_workers=8,
+                                  pin_memory=True,
+                                  batch_sampler=sampler)
+        workspace.log(f'{sampler} is enabled')
+        workspace.log(f'Real batch_size={sampler.batch_size}')
+    elif conf.sampler_type == 'random':
+        train_loader = DataLoader(train_dataset,
+                                  batch_size=conf.batch_size,
+                                  shuffle=True,
+                                  num_workers=8,
+                                  pin_memory=True,
+                                  drop_last=True)
+    else:
+        raise ValueError(f'Invalid sampler_type: {conf.sampler_type}')
+
     val_loader = DataLoader(val_dataset,
                             batch_size=conf.batch_size,
                             shuffle=False,
@@ -98,7 +114,7 @@ def main():
         )
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, patience=2, mode='max',
+            optimizer, patience=3, mode='max',
             factor=0.1, min_lr=1e-7, verbose=True
         )
     else:
