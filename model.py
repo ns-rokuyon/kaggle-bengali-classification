@@ -96,6 +96,157 @@ def global_pooling(pooling_type='gap'):
     return pool
 
 
+class SeparableConv2d(nn.Module):
+    def __init__(self, inplanes, planes,
+                 kernel_size=3, stride=1, padding=1,
+                 dilation=1, bias=False):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            inplanes, inplanes, kernel_size,
+            stride, padding=padding, dilation=dilation,
+            groups=inplanes, bias=bias
+        )
+        self.bn = nn.BatchNorm2d(inplanes)
+        self.pointwise = nn.Conv2d(inplanes, planes, 1, 1, 0, 1, 1, bias=bias)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn(x)
+        x = self.pointwise(x)
+        return x
+
+
+class JPU(nn.Module):
+    """https://github.com/wuhuikai/FastFCN/blob/master/encoding/models/deeplabv3.py
+    """
+    def __init__(self, in_channels=None, width=512):
+        in_channels = in_channels or [512, 1024, 2048]
+        assert len(in_channels) == 3
+        super().__init__()
+        self.out_channel = width * 4
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(in_channels[0], width, 3, padding=1, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(in_channels[1], width, 3, padding=1, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(in_channels[2], width, 3, padding=1, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+        self.d1 = nn.Sequential(
+            SeparableConv2d(3 * width, width, kernel_size=3,
+                            padding=1, dilation=1, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+        self.d2 = nn.Sequential(
+            SeparableConv2d(3 * width, width, kernel_size=3,
+                            padding=2, dilation=2, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+        self.d3 = nn.Sequential(
+            SeparableConv2d(3 * width, width, kernel_size=3,
+                            padding=4, dilation=4, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+        self.d4 = nn.Sequential(
+            SeparableConv2d(3 * width, width, kernel_size=3,
+                            padding=8, dilation=8, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, *inputs):
+        x3, x4, x5 = inputs
+        f3 = self.conv3(x3)
+        f4 = self.conv4(x4)
+        f5 = self.conv5(x5)
+
+        _, _, h, w = f3.size()
+
+        f4 = F.interpolate(f4, (h, w), mode='bilinear', align_corners=True)
+        f5 = F.interpolate(f5, (h, w), mode='bilinear', align_corners=True)
+
+        f = torch.cat([f3, f4, f5], dim=1)
+        f = torch.cat([self.d1(f), self.d2(f), self.d3(f), self.d4(f)], dim=1)
+
+        return f
+
+
+def ASPPConv(in_channels, out_channels, atrous_rate):
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, 3, padding=atrous_rate,
+                  dilation=atrous_rate, bias=False),
+        nn.BatchNorm2d(out_channels),
+        nn.ReLU(inplace=True))
+
+
+class ASPPPool(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.pool = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_dim, out_dim, 1, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        _, _, h, w = x.size()
+        x = self.pool(x)
+        return F.interpolate(x, (h, w),
+                             mode='bilinear',
+                             align_corners=True)
+
+
+class ASPP(nn.Module):
+    def __init__(self, in_dim, atrous_rates=(6, 12, 18)):
+        super().__init__()
+        out_dim = in_dim // 8
+        if len(atrous_rates) == 3:
+            rate1, rate2, rate3 = tuple(atrous_rates)
+            rate4 = None
+        elif len(atrous_rates) == 4:
+            rate1, rate2, rate3, rate4 = tuple(atrous_rates)
+
+        self.b0 = nn.Sequential(
+            nn.Conv2d(in_dim, out_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.ReLU(inplace=True)
+        )
+        self.b1 = ASPPConv(in_dim, out_dim, rate1)
+        self.b2 = ASPPConv(in_dim, out_dim, rate2)
+        self.b3 = ASPPConv(in_dim, out_dim, rate3)
+        if rate4:
+            self.b4 = ASPPConv(in_dim, out_dim, rate4)
+        else:
+            self.b4 = ASPPPool(in_dim, out_dim)
+        self.project = nn.Sequential(
+            nn.Conv2d(5 * out_dim, out_dim, 1, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(0.5, inplace=False)
+        )
+
+    def forward(self, x):
+        x = torch.cat([
+            self.b0(x),
+            self.b1(x),
+            self.b2(x),
+            self.b3(x),
+            self.b4(x),
+        ], dim=1)
+        return self.project(x)
+
+
 class MultiHeadCenterClassifier(nn.Module):
     def __init__(self, in_channel, dim=64,
                  temperature=0.05,
@@ -268,6 +419,49 @@ class BengaliSEResNeXt50(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class BengaliResNet34JPU(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(pretrained=pretrained)
+        self.jpu = JPU(in_channels=[128, 256, 512], width=128)
+        self.aspp = ASPP(512)
+        self.multihead = MultiHeadClassifier(512 // 8, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend[0](x)
+        x = self.backend[1](x)
+        x = self.backend[2](x)
+        x = self.backend[3](x)
+        x = self.backend[4](x)
+        c2 = self.backend[5](x)
+        c3 = self.backend[6](c2)
+        c4 = self.backend[7](c3)
+        x = self.jpu(c2, c3, c4)
+        x = self.aspp(x)
+
+        logit_g, logit_v, logit_c = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
+class BengaliResNet34NS(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 dim=64,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(pretrained=pretrained)
+        self.multihead = MultiHeadCenterClassifier2(512, dim=dim, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend(x)
+        logit_g, logit_v, logit_c = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
 class BengaliSEResNeXt50NS(nn.Module):
     def __init__(self,
                  pretrained=True,
@@ -280,8 +474,8 @@ class BengaliSEResNeXt50NS(nn.Module):
 
     def forward(self, x):
         x = self.backend.features(x)
-        feat_g, feat_v, feat_c = self.multihead(x)
-        return feat_g, feat_v, feat_c
+        logit_g, logit_v, logit_c = self.multihead(x)
+        return logit_g, logit_v, logit_c
 
 
 def create_init_model(arch, **kwargs):
@@ -289,6 +483,10 @@ def create_init_model(arch, **kwargs):
         model = BengaliResNet34(**kwargs)
     elif arch == 'BengaliSEResNeXt50':
         model = BengaliSEResNeXt50(**kwargs)
+    elif arch == 'BengaliResNet34JPU':
+        model = BengaliResNet34JPU(**kwargs)
+    elif arch == 'BengaliResNet34NS':
+        model = BengaliResNet34NS(**kwargs)
     elif arch == 'BengaliSEResNeXt50NS':
         model = BengaliSEResNeXt50NS(**kwargs)
     else:
