@@ -230,7 +230,7 @@ def train(model, train_loader, val_loader,
         workspace.plot_score('val/score', score, epoch)
 
         workspace.save_bestmodel(model, epoch, score)
-        workspace.save_model(model, epoch)
+    workspace.save_model(model, n_epoch)
 
 
 def evaluate(model, val_loader, device=None):
