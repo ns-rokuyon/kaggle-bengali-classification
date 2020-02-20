@@ -11,14 +11,14 @@ from argparse import ArgumentParser
 import loss as L
 from dataset import bengali_dataset
 from data import get_logger, Workspace, get_current_lr
-from model import create_init_model
+from model import create_init_model, set_batchnorm_eval
 from preprocessing import (
     create_transformer_v1,
     create_testing_transformer_v1,
     create_augmentor_v1
 )
 from evaluation import hierarchical_macro_averaged_recall
-from optim import CosineLRWithRestarts
+from optim import CosineLRWithRestarts, Ranger
 from loss import get_criterion
 from sampler import PKSampler
 from config import Config
@@ -100,13 +100,29 @@ def main():
     model = create_init_model(conf.arch,
                               pretrained=True,
                               pooling=conf.pooling_type,
-                              dim=conf.feat_dim)
+                              dim=conf.feat_dim,
+                              use_maxblurpool=conf.use_maxblurpool)
     model = model.cuda()
 
     criterion = get_criterion(conf.loss_type)
     workspace.log(f'Loss type: {conf.loss_type}')
 
-    optimizer = torch.optim.Adam(model.parameters())
+    if conf.optimizer_type == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(),
+                                     lr=conf.lr)
+    elif conf.optimizer_type == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(),
+                                    lr=conf.lr,
+                                    momentum=0.9,
+                                    weight_decay=1e-4)
+    elif conf.optimizer_type == 'ranger':
+        optimizer = Ranger(model.parameters(),
+                           lr=conf.lr,
+                           weight_decay=1e-4)
+    else:
+        raise ValueError(conf.optimizer_type)
+    workspace.log(f'Optimizer type: {conf.optimizer_type}')
+
     if conf.scheduler_type == 'cosanl':
         scheduler = CosineLRWithRestarts(
             optimizer, conf.batch_size, len(train_dataset),
@@ -114,8 +130,8 @@ def main():
         )
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, patience=3, mode='max',
-            factor=0.1, min_lr=1e-7, verbose=True
+            optimizer, patience=conf.rop_patience, mode='max',
+            factor=conf.rop_factor, min_lr=1e-7, verbose=True
         )
     else:
         raise ValueError(conf.scheduler_type)
@@ -126,7 +142,8 @@ def main():
           workspace,
           scheduler=scheduler,
           n_epoch=conf.n_epoch,
-          cutmix_prob=conf.cutmix_prob)
+          cutmix_prob=conf.cutmix_prob,
+          freeze_bn_epochs=conf.freeze_bn_epochs)
 
 
 def train(model, train_loader, val_loader,
@@ -135,15 +152,20 @@ def train(model, train_loader, val_loader,
           workspace: Workspace,
           scheduler=None,
           n_epoch=30,
-          cutmix_prob=0):
+          cutmix_prob=0,
+          freeze_bn_epochs=None):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
     workspace.plot_score('val/score', score, 0)
 
+    freeze_bn_epochs = freeze_bn_epochs or []
     global_step = -1
 
     for epoch in range(1, n_epoch + 1):
         model.train()
+        if epoch in freeze_bn_epochs:
+            model.apply(set_batchnorm_eval)
+            workspace.log(f'Freeze BN', epoch=epoch)
 
         if scheduler:
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -208,6 +230,7 @@ def train(model, train_loader, val_loader,
         workspace.plot_score('val/score', score, epoch)
 
         workspace.save_bestmodel(model, epoch, score)
+        workspace.save_model(model, epoch)
 
 
 def evaluate(model, val_loader, device=None):

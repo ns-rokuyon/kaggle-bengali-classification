@@ -125,6 +125,11 @@ class Workspace:
             self.best_score = score
             self.best_epoch = epoch
 
+    def save_model(self, model: torch.nn.Module, epoch: int):
+        model_path = self.model_dir / f'{self.run_id}_epoch{epoch}.model'
+        torch.save(model.state_dict(), model_path)
+        self.log(f'Saved model: {model_path}', epoch=epoch)
+
     def plot_score(self, tag, value, global_step):
         self.tb_writer.add_scalar(tag, value,
                                   global_step=global_step)
