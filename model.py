@@ -547,6 +547,34 @@ class BengaliResNet34NS(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class BengaliResNet34JPUNS3(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 dim=64,
+                 use_maxblurpool=False,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(pretrained=pretrained,
+                                             use_maxblurpool=use_maxblurpool)
+        self.jpu = JPU(in_channels=[128, 256, 512], width=128)
+        self.multihead = MultiHeadCenterClassifier3(512, dim=dim, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend[0](x)
+        x = self.backend[1](x)
+        x = self.backend[2](x)
+        x = self.backend[3](x)
+        x = self.backend[4](x)
+        c2 = self.backend[5](x)
+        c3 = self.backend[6](c2)
+        c4 = self.backend[7](c3)
+        x = self.jpu(c2, c3, c4)
+
+        logit_g, logit_v, logit_c = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
 class BengaliMXResNet34NS(nn.Module):
     def __init__(self,
                  pretrained=True,
@@ -588,6 +616,8 @@ def create_init_model(arch, **kwargs):
         model = BengaliResNet34JPU(**kwargs)
     elif arch == 'BengaliResNet34NS':
         model = BengaliResNet34NS(**kwargs)
+    elif arch == 'BengaliResNet34JPUNS3':
+        model = BengaliResNet34JPUNS3(**kwargs)
     elif arch == 'BengaliMXResNet34NS':
         model = BengaliMXResNet34NS(**kwargs)
     elif arch == 'BengaliSEResNeXt50NS':
