@@ -23,6 +23,7 @@ pretrainedmodels = "*"
 pyyaml = "*"
 pytorch-metric-learning = "*"
 albumentations = "*"
+fastai = "*"
 
 [requires]
 python_version = "3.7"
