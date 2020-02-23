@@ -24,7 +24,8 @@ defs = {
     'cutmix_prob': (float, 0.0),
     'feat_dim': (int, 64),
     'rop_patience': (int, 3),
-    'rop_factor': (float, 0.1)
+    'rop_factor': (float, 0.1),
+    'enable_random_morph': (bool, False)
 }
 
 
