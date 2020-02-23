@@ -9,6 +9,8 @@ def get_criterion(loss_type, **kwargs):
         return F.cross_entropy
     elif loss_type == 'ohem':
         return OHEMCrossEntropyLoss(**kwargs).cuda()
+    elif loss_type == 'focal':
+        return focal_loss
     else:
         raise ValueError(loss_type)
 
@@ -25,6 +27,24 @@ class OHEMCrossEntropyLoss(nn.Module):
                                ignore_index=-1)
         loss, _ = loss.topk(k=int(self.rate * batch_size))
         return torch.mean(loss)
+
+
+def focal_loss(input, target, OHEM_percent=None, n_class=None):
+    """https://github.com/SeuTao/Humpback-Whale-Identification-Challenge-2019_2nd_palce_solution/blob/master/loss/loss.py
+    """
+    gamma = 2
+    assert target.size() == input.size()
+
+    max_val = (-input).clamp(min=0)
+    loss = input - input * target + max_val + ((-max_val).exp() + (-input - max_val).exp()).log()
+    invprobs = F.logsigmoid(-input * (target * 2 - 1))
+    loss = (invprobs * gamma).exp() * loss
+
+    if OHEM_percent is None:
+        return loss.mean()
+    else:
+        OHEM, _ = loss.topk(k=int(n_class * OHEM_percent), dim=1, largest=True, sorted=True)
+        return OHEM.mean()
 
 
 class SoftTripleLoss(nn.Module):

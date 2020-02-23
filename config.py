@@ -11,10 +11,12 @@ defs = {
     'arch': (str, 'BengaliSEResNeXt50'),
     'use_maxblurpool': (bool, False),
     'batch_size': (int, 64),
+    'batch_p': (int, 64),
+    'batch_k': (int, 2),
     'input_size': (int, 128),
     'lr': (float, 1e-3),
     'freeze_bn_epochs': (lambda xs: list(map(int, xs)), []),
-    'loss_type': (str, 'ce'),   # ce | ohem
+    'loss_type': (str, 'ce'),   # ce | ohem | focal
     'pooling_type': (str, 'gap'),   # gap | gemp
     'optimizer_type': (str, 'adam'),    # adam | sgd
     'scheduler_type': (str, 'cosanl'),  # cosanl | rop

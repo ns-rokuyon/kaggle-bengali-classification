@@ -7,6 +7,7 @@ from torchvision.models import resnet34, resnet50
 from typing import Tuple, List
 from lib.maxblurpool import MaxBlurPool2d
 from lib.xresnet import mxresnet34, Mish
+from lib.arcface import ArcFace
 
 
 def make_model_1ch_input(model):
@@ -436,6 +437,65 @@ class MultiHeadCenterClassifier3(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class MultiHeadAF(nn.Module):
+    def __init__(self, in_channel, dim=64,
+                 temperature=0.05,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
+        super().__init__()
+        self.temperature = temperature
+        self.n_grapheme = n_grapheme
+        self.n_vowel = n_vowel
+        self.n_consonant = n_consonant
+        self.pool = global_pooling(pooling_type=pooling)
+
+        self.af_g = ArcFace(dim, self.n_grapheme)
+        self.af_v = ArcFace(dim, self.n_vowel)
+        self.af_c = ArcFace(dim, self.n_consonant)
+
+        self.bn = nn.BatchNorm1d(in_channel)
+
+        self.head_g = nn.Sequential(
+            nn.Linear(in_channel, 2 * dim),
+            Mish(),
+            nn.BatchNorm1d(2 * dim),
+            nn.Linear(2 * dim, dim)
+        )
+        self.head_v = nn.Sequential(
+            nn.Linear(in_channel, 2 * dim),
+            Mish(),
+            nn.BatchNorm1d(2 * dim),
+            nn.Linear(2 * dim, dim)
+        )
+        self.head_c = nn.Sequential(
+            nn.Linear(in_channel, 2 * dim),
+            Mish(),
+            nn.BatchNorm1d(2 * dim),
+            nn.Linear(2 * dim, dim)
+        )
+
+    def forward(self, x, tg=None, tv=None, tc=None):
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+
+        x = self.bn(x)
+
+        logit_g = self.af_g(
+            F.normalize(self.head_g(x)),
+            label=tg
+        )
+        logit_v = self.af_v(
+            F.normalize(self.head_v(x)),
+            label=tv
+        )
+        logit_c = self.af_c(
+            F.normalize(self.head_c(x)),
+            label=tc
+        )
+
+        return logit_g, logit_v, logit_c
+
+
 class MultiHeadClassifier(nn.Module):
     def __init__(self, in_channel,
                  n_grapheme=168, n_vowel=11, n_consonant=7,
@@ -575,6 +635,34 @@ class BengaliResNet34JPUNS3(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class BengaliResNet34JPUAF(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 dim=64,
+                 use_maxblurpool=False,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(pretrained=pretrained,
+                                             use_maxblurpool=use_maxblurpool)
+        self.jpu = JPU(in_channels=[128, 256, 512], width=128)
+        self.multihead = MultiHeadAF(512, dim=dim, pooling=pooling)
+
+    def forward(self, x, tg=None, tv=None, tc=None):
+        x = self.backend[0](x)
+        x = self.backend[1](x)
+        x = self.backend[2](x)
+        x = self.backend[3](x)
+        x = self.backend[4](x)
+        c2 = self.backend[5](x)
+        c3 = self.backend[6](c2)
+        c4 = self.backend[7](c3)
+        x = self.jpu(c2, c3, c4)
+
+        logit_g, logit_v, logit_c = self.multihead(x, tg, tv, tc)
+        return logit_g, logit_v, logit_c
+
+
 class BengaliMXResNet34NS(nn.Module):
     def __init__(self,
                  pretrained=True,
@@ -618,6 +706,8 @@ def create_init_model(arch, **kwargs):
         model = BengaliResNet34NS(**kwargs)
     elif arch == 'BengaliResNet34JPUNS3':
         model = BengaliResNet34JPUNS3(**kwargs)
+    elif arch == 'BengaliResNet34JPUAF':
+        model = BengaliResNet34JPUAF(**kwargs)
     elif arch == 'BengaliMXResNet34NS':
         model = BengaliMXResNet34NS(**kwargs)
     elif arch == 'BengaliSEResNeXt50NS':

@@ -9,6 +9,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 
 import loss as L
+import model as M
 from dataset import bengali_dataset
 from data import get_logger, Workspace, get_current_lr
 from model import create_init_model, set_batchnorm_eval
@@ -72,7 +73,7 @@ def main():
     if conf.sampler_type == 'pk':
         sampler = PKSampler(train_dataset,
                             n_iter_per_epoch=conf.n_iter_per_epoch,
-                            p=24, k=4)
+                            p=conf.batch_p, k=conf.batch_k)
         train_loader = DataLoader(train_dataset,
                                   shuffle=False,
                                   num_workers=8,
@@ -188,7 +189,10 @@ def train(model, train_loader, val_loader,
                 tva, tvb = tv, tv[rand_index]
                 tca, tcb = tc, tc[rand_index]
 
-                logit_g, logit_v, logit_c = model(x)
+                if isinstance(model, (M.BengaliResNet34JPUAF,)):
+                    logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
+                else:
+                    logit_g, logit_v, logit_c = model(x)
 
                 loss_g = cutmix_criterion(
                     logit_g, tga, tgb, lam, criterion=criterion
@@ -200,7 +204,10 @@ def train(model, train_loader, val_loader,
                     logit_c, tca, tcb, lam, criterion=criterion
                 )
             else:
-                logit_g, logit_v, logit_c = model(x)
+                if isinstance(model, (M.BengaliResNet34JPUAF,)):
+                    logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
+                else:
+                    logit_g, logit_v, logit_c = model(x)
 
                 loss_g = criterion(logit_g, tg)
                 loss_v = criterion(logit_v, tv)
