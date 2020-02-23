@@ -10,7 +10,7 @@ from functools import partial
 from fastai.torch_core import Module
 import torch.nn.functional as F  #(uncomment if needed,but you likely already have it)
 
-from maxblurpool import MaxBlurPool2d
+from .maxblurpool import MaxBlurPool2d
 
 class Mish(nn.Module):
     def __init__(self):
@@ -21,8 +21,6 @@ class Mish(nn.Module):
         return x *( torch.tanh(F.softplus(x))) 
         
 
-
-    
 
 #Unmodified from https://github.com/fastai/fastai/blob/5c51f9eabf76853a89a9bc5741804d2ed4407e49/fastai/layers.py
 def conv1d(ni:int, no:int, ks:int=1, stride:int=1, padding:int=0, bias:bool=False):

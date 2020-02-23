@@ -5,8 +5,8 @@ import torch.nn.functional as F
 import pretrainedmodels
 from torchvision.models import resnet34, resnet50
 from typing import Tuple, List
-from maxblurpool import MaxBlurPool2d
-from xresnet import mxresnet34, Mish
+from lib.maxblurpool import MaxBlurPool2d
+from lib.xresnet import mxresnet34, Mish
 
 
 def make_model_1ch_input(model):
