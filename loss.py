@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from pytorch_toolbelt.losses import FocalLoss
 from lib.cutmix import cutmix_criterion
 
 
@@ -10,7 +11,9 @@ def get_criterion(loss_type, **kwargs):
     elif loss_type == 'ohem':
         return OHEMCrossEntropyLoss(**kwargs).cuda()
     elif loss_type == 'focal':
-        return focal_loss
+        return FocalLoss().cuda()
+    elif loss_type == 'reduced_focal':
+        return FocalLoss(reduced_threshold=0.5).cuda()
     else:
         raise ValueError(loss_type)
 
