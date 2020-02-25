@@ -22,12 +22,19 @@ def make_model_1ch_input(model):
     return nn.Sequential(*layers)
 
 
-def make_backend_resnet34(pretrained=True, use_maxblurpool=False):
+def make_backend_resnet34(pretrained=True,
+                          use_maxblurpool=False,
+                          remove_last_stride=False):
     model = resnet34(pretrained=pretrained)
     layers = list(model.children())[:-2]
     backend = nn.Sequential(*layers)
     if use_maxblurpool:
         backend[3] = MaxBlurPool2d(3, True)
+        print('Use: MaxBlurPool2d')
+    if remove_last_stride:
+        backend[-1][0].conv1.stride = (1, 1)
+        backend[-1][0].downsample[0].stride = (1, 1)
+        print('Removed: last stride')
     return make_model_1ch_input(backend)
 
 
@@ -536,9 +543,14 @@ class BengaliResNet34(nn.Module):
     def __init__(self,
                  pretrained=True,
                  pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
                  **kwargs):
         super().__init__()
-        self.backend = make_backend_resnet34(pretrained=pretrained)
+        self.backend = make_backend_resnet34(
+            pretrained=pretrained,
+            use_maxblurpool=use_maxblurpool,
+            remove_last_stride=remove_last_stride)
         self.multihead = MultiHeadClassifier(512, pooling=pooling)
 
     def forward(self, x):
@@ -566,12 +578,15 @@ class BengaliResNet34JPU(nn.Module):
     def __init__(self,
                  pretrained=True,
                  pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
                  **kwargs):
         super().__init__()
-        self.backend = make_backend_resnet34(pretrained=pretrained)
+        self.backend = make_backend_resnet34(pretrained=pretrained,
+                                             use_maxblurpool=use_maxblurpool,
+                                             remove_last_stride=remove_last_stride)
         self.jpu = JPU(in_channels=[128, 256, 512], width=128)
-        self.aspp = ASPP(512)
-        self.multihead = MultiHeadClassifier(512 // 8, pooling=pooling)
+        self.multihead = MultiHeadClassifier(512, pooling=pooling)
 
     def forward(self, x):
         x = self.backend[0](x)
@@ -583,7 +598,6 @@ class BengaliResNet34JPU(nn.Module):
         c3 = self.backend[6](c2)
         c4 = self.backend[7](c3)
         x = self.jpu(c2, c3, c4)
-        x = self.aspp(x)
 
         logit_g, logit_v, logit_c = self.multihead(x)
         return logit_g, logit_v, logit_c
@@ -595,10 +609,12 @@ class BengaliResNet34NS(nn.Module):
                  pooling='gap',
                  dim=64,
                  use_maxblurpool=False,
+                 remove_last_stride=False,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
-                                             use_maxblurpool=use_maxblurpool)
+                                             use_maxblurpool=use_maxblurpool,
+                                             remove_last_stride=remove_last_stride)
         self.multihead = MultiHeadCenterClassifier2(512, dim=dim, pooling=pooling)
 
     def forward(self, x):
@@ -613,10 +629,12 @@ class BengaliResNet34JPUNS3(nn.Module):
                  pooling='gap',
                  dim=64,
                  use_maxblurpool=False,
+                 remove_last_stride=False,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
-                                             use_maxblurpool=use_maxblurpool)
+                                             use_maxblurpool=use_maxblurpool,
+                                             remove_last_stride=remove_last_stride)
         self.jpu = JPU(in_channels=[128, 256, 512], width=128)
         self.multihead = MultiHeadCenterClassifier3(512, dim=dim, pooling=pooling)
 
@@ -641,10 +659,12 @@ class BengaliResNet34JPUAF(nn.Module):
                  pooling='gap',
                  dim=64,
                  use_maxblurpool=False,
+                 remove_last_stride=False,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
-                                             use_maxblurpool=use_maxblurpool)
+                                             use_maxblurpool=use_maxblurpool,
+                                             remove_last_stride=remove_last_stride)
         self.jpu = JPU(in_channels=[128, 256, 512], width=128)
         self.multihead = MultiHeadAF(512, dim=dim, pooling=pooling)
 
