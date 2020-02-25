@@ -1,4 +1,5 @@
 import pandas as pd
+from pathlib import Path
 from torch.utils.data.dataset import Dataset
 
 from data import read_image, load_kfolds
@@ -10,6 +11,7 @@ def bengali_dataset(data_dir, fold_id=0,
                     logger=None):
     """Load Bengali dataset (train, val)
     """
+    data_dir = Path(data_dir)
     train_csv = data_dir / 'train.csv'
     train_image_data = [
         data_dir / f'train_image_data_{i}.parquet'
@@ -86,3 +88,15 @@ class BengaliSubsetDataset(BengaliDataset):
 
     def get_grapheme_root_labels(self):
         return self.df.grapheme_root[self.active_ids]
+
+    def get_class_weights_g(self):
+        g_counts = self.df.grapheme_root.value_counts()
+        return g_counts[list(range(len(g_counts)))]
+
+    def get_class_weights_v(self):
+        v_counts = self.df.vowel_diacritic.value_counts()
+        return v_counts[list(range(len(v_counts)))]
+
+    def get_class_weights_c(self):
+        c_counts = self.df.consonant_diacritic.value_counts()
+        return c_counts[list(range(len(c_counts)))]

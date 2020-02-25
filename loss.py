@@ -5,9 +5,11 @@ from pytorch_toolbelt.losses import FocalLoss
 from lib.cutmix import cutmix_criterion
 
 
-def get_criterion(loss_type, **kwargs):
+def get_criterion(loss_type, weights=None, **kwargs):
     if loss_type == 'ce':
         return F.cross_entropy
+    elif loss_type == 'weighted_ce':
+        return nn.CrossEntropyLoss(weight=weights).cuda()
     elif loss_type == 'ohem':
         return OHEMCrossEntropyLoss(**kwargs).cuda()
     elif loss_type == 'focal':
