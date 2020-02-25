@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import albumentations as alb
+import random
 from PIL import Image
 from torchvision import transforms
 from data import SOURCE_IMAGE_HEIGHT, SOURCE_IMAGE_WIDTH
@@ -69,6 +70,23 @@ def create_augmentor_v1(enable_random_morph=False):
             ], p=0.5),
             alb.RandomBrightness(p=0.5),
             alb.Blur(p=0.5)
+        ]
+    augmentor = alb.Compose(ts)
+    return augmentor
+
+
+def create_augmentor_v2(enable_random_morph=False):
+    if enable_random_morph:
+        ts = [
+            alb.ShiftScaleRotate(rotate_limit=10, p=0.5),
+            RandomMorph(p=0.5),
+            alb.Cutout(p=0.5, fill_value=255)
+        ]
+    else:
+        ts = [
+            alb.ShiftScaleRotate(rotate_limit=10, p=0.5),
+            alb.Blur(p=0.5),
+            alb.Cutout(p=0.5, fill_value=255)
         ]
     augmentor = alb.Compose(ts)
     return augmentor
