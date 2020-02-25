@@ -16,7 +16,8 @@ from model import create_init_model, set_batchnorm_eval
 from preprocessing import (
     create_transformer_v1,
     create_testing_transformer_v1,
-    create_augmentor_v1
+    create_augmentor_v1,
+    create_augmentor_v2
 )
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts, Ranger
@@ -47,7 +48,16 @@ def main():
     torch.cuda.set_device(0)
 
     if conf.use_augmentor:
-        augmentor = create_augmentor_v1()
+        if conf.augmentor_type == 'v1':
+            augmentor = create_augmentor_v1(
+                enable_random_morph=conf.enable_random_morph
+            )
+        elif conf.augmentor_type == 'v2':
+            augmentor = create_augmentor_v2(
+                enable_random_morph=conf.enable_random_morph
+            )
+        else:
+            raise ValueError(conf.augmentor_type)
         workspace.log(f'Use augmentor: {conf.augmentor_type}')
     else:
         augmentor = None
@@ -102,11 +112,27 @@ def main():
                               pretrained=True,
                               pooling=conf.pooling_type,
                               dim=conf.feat_dim,
-                              use_maxblurpool=conf.use_maxblurpool)
+                              use_maxblurpool=conf.use_maxblurpool,
+                              remove_last_stride=conf.remove_last_stride)
     model = model.cuda()
 
-    criterion = get_criterion(conf.loss_type)
-    workspace.log(f'Loss type: {conf.loss_type}')
+    criterion_g = get_criterion(
+        conf.loss_type_g,
+        weight=train_dataset.get_class_weights_g()
+    )
+    workspace.log(f'Loss type (g): {conf.loss_type_g}')
+
+    criterion_v = get_criterion(
+        conf.loss_type_v,
+        weights=train_dataset.get_class_weights_v()
+    )
+    workspace.log(f'Loss type (v): {conf.loss_type_v}')
+
+    criterion_c = get_criterion(
+        conf.loss_type_c,
+        weights=train_dataset.get_class_weights_c()
+    )
+    workspace.log(f'Loss type (c): {conf.loss_type_c}')
 
     if conf.optimizer_type == 'adam':
         optimizer = torch.optim.Adam(model.parameters(),
@@ -139,7 +165,9 @@ def main():
 
     train(model, train_loader, val_loader,
           optimizer,
-          criterion,
+          criterion_g,
+          criterion_v,
+          criterion_c,
           workspace,
           scheduler=scheduler,
           n_epoch=conf.n_epoch,
@@ -149,7 +177,9 @@ def main():
 
 def train(model, train_loader, val_loader,
           optimizer: torch.optim.Optimizer,
-          criterion,
+          criterion_g,
+          criterion_v,
+          criterion_c,
           workspace: Workspace,
           scheduler=None,
           n_epoch=30,
@@ -195,13 +225,13 @@ def train(model, train_loader, val_loader,
                     logit_g, logit_v, logit_c = model(x)
 
                 loss_g = cutmix_criterion(
-                    logit_g, tga, tgb, lam, criterion=criterion
+                    logit_g, tga, tgb, lam, criterion=criterion_g
                 )
                 loss_v = cutmix_criterion(
-                    logit_v, tva, tvb, lam, criterion=criterion
+                    logit_v, tva, tvb, lam, criterion=criterion_v
                 )
                 loss_c = cutmix_criterion(
-                    logit_c, tca, tcb, lam, criterion=criterion
+                    logit_c, tca, tcb, lam, criterion=criterion_c
                 )
             else:
                 if isinstance(model, (M.BengaliResNet34JPUAF,)):
@@ -209,9 +239,9 @@ def train(model, train_loader, val_loader,
                 else:
                     logit_g, logit_v, logit_c = model(x)
 
-                loss_g = criterion(logit_g, tg)
-                loss_v = criterion(logit_v, tv)
-                loss_c = criterion(logit_c, tc)
+                loss_g = criterion_g(logit_g, tg)
+                loss_v = criterion_v(logit_v, tv)
+                loss_c = criterion_c(logit_c, tc)
 
             loss = loss_g + loss_v + loss_c
 

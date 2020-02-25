@@ -1,10 +1,12 @@
-run_id: run-27
+run_id: run-34
 
 data_dir: data
 fold_id: 0
 
-arch: BengaliResNet34JPUNS3
+#arch: BengaliResNet34JPUNS3
+arch: BengaliResNet34
 use_maxblurpool: True
+remove_last_stride: True
 
 n_epoch: 50
 #batch_size: 96
@@ -17,17 +19,20 @@ batch_k: 2
 n_iter_per_epoch: 800
 #input_size: 224
 input_size: 128
-#lr: 0.001
-lr: 0.01
+lr: 0.001
+#lr: 0.01
 freeze_bn_epochs:
   - 49
   - 50
 
-loss_type: reduced_focal   # ce | ohem | focal | reduced_focal
+loss_type_g: weighted_ce   # ce | weighted_ce | ohem | focal | reduced_focal
+loss_type_v: weighted_ce   # ce | weighted_ce | ohem | focal | reduced_focal
+loss_type_c: weighted_ce   # ce | weighted_ce | ohem | focal | reduced_focal
+
 pooling_type: gemp   # gap | gemp
 optimizer_type: ranger   # sgd | adam | ranger
 scheduler_type: rop   # cosanl | rop
-augmentor_type: v1    # v1
+augmentor_type: v2    # v1
 sampler_type: random  # random | pk
 
 use_augmentor: true
