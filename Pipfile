@@ -6,6 +6,7 @@ verify_ssl = true
 [dev-packages]
 jupyter = "*"
 pylint = "*"
+autopep8 = "*"
 
 [packages]
 numpy = "*"
