@@ -1,8 +1,11 @@
 import pandas as pd
 import numpy as np
 import torch
+import random
 from pathlib import Path
+from collections import defaultdict
 from torch.utils.data.dataset import Dataset
+from torch.utils.data.dataloader import default_collate
 
 from data import read_image, load_kfolds
 
@@ -94,7 +97,12 @@ class BengaliSubsetDataset(BengaliDataset):
                  n_channel=1):
         super().__init__(df, image_ids, images,
                          transformer=transformer, invert_color=invert_color, n_channel=n_channel)
-        self.active_ids = active_ids
+        self.active_ids = active_ids    # i (All) -> j (Subset)
+        self.j2i_maps = {}              # j (Subset) -> i (All)
+        self.low_freq_groups = {}
+        self.low_freq_labels = []
+        for i in range(len(self.active_ids)):
+            self.j2i_maps[self.active_ids[i]] = i
 
     def __len__(self):
         return len(self.active_ids)
@@ -102,6 +110,36 @@ class BengaliSubsetDataset(BengaliDataset):
     def __getitem__(self, i):
         j = self.active_ids[i]
         return super().__getitem__(j)
+
+    def random_sample_from_low_freq_groups(self):
+        label = random.choice(self.low_freq_labels)
+        i = random.choice(self.low_freq_groups[label])
+        return self[i]
+
+    def random_sample_batch_from_low_freq_groups(self, batch_size, collate_fn=None):
+        labels = random.sample(self.low_freq_labels, batch_size)
+        batch = []
+        for label in labels:
+            i = random.choice(self.low_freq_groups[label])
+            batch.append(self[i])
+        return (collate_fn or default_collate)(batch)
+
+    def random_sample_ilist_from_low_freq_groups(self, batch_size):
+        labels = random.sample(self.low_freq_labels, batch_size)
+        return [random.choice(self.low_freq_groups[label])
+                for label in labels]
+
+    def set_low_freq_groups(self, n_class=60):
+        ws = self.get_class_weights_g()
+        _, low_freq_labels = ws.topk(n_class)
+        low_freq_labels = set(low_freq_labels.numpy().tolist())
+        groups = defaultdict(list)
+        for j, label in self.get_grapheme_root_labels().iteritems():
+            if label in low_freq_labels:
+                i = self.j2i_maps[j]
+                groups[label].append(i)
+        self.low_freq_groups = groups
+        self.low_freq_labels = sorted(list(groups.keys()))
 
     def get_grapheme_root_labels(self):
         return self.df.grapheme_root[self.active_ids]

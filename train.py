@@ -25,7 +25,7 @@ from preprocessing import (
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts, Ranger
 from loss import get_criterion
-from sampler import PKSampler
+from sampler import PKSampler, LowFreqSampleMixinBatchSampler
 from config import Config
 from lib.cutmix import cutmix, cutmix_criterion
 
@@ -93,6 +93,7 @@ def main():
                                                  n_channel=conf.n_channel,
                                                  logger=workspace.logger)
     workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
+    train_dataset.set_low_freq_groups()
 
     if conf.sampler_type == 'pk':
         sampler = PKSampler(train_dataset,
@@ -105,6 +106,20 @@ def main():
                                   batch_sampler=sampler)
         workspace.log(f'{sampler} is enabled')
         workspace.log(f'Real batch_size={sampler.batch_size}')
+    elif conf.sampler_type == 'random+append':
+        batch_sampler = LowFreqSampleMixinBatchSampler(
+            train_dataset,
+            conf.batch_size,
+            n_low_freq_samples=conf.n_low_freq_samples,
+            drop_last=True
+        )
+        train_loader = DataLoader(train_dataset,
+                                  shuffle=False,
+                                  num_workers=8,
+                                  pin_memory=True,
+                                  batch_sampler=batch_sampler)
+        workspace.log(f'{batch_sampler} is enabled')
+        workspace.log(f'Real batch_size={batch_sampler.batch_size}')
     elif conf.sampler_type == 'random':
         train_loader = DataLoader(train_dataset,
                                   batch_size=conf.batch_size,
@@ -149,6 +164,33 @@ def main():
     )
     workspace.log(f'Loss type (c): {conf.loss_type_c}')
 
+    if conf.loss_type_feat_g != 'none':
+        criterion_feat_g = get_criterion(
+            conf.loss_type_feat_g,
+            dim=128, n_class=168
+        )
+        workspace.log(f'Loss type (fg): {conf.loss_type_feat_g}')
+    else:
+        criterion_feat_g = None
+
+    if conf.loss_type_feat_v != 'none':
+        criterion_feat_v = get_criterion(
+            conf.loss_type_feat_v,
+            dim=32, n_class=11
+        )
+        workspace.log(f'Loss type (fv): {conf.loss_type_feat_v}')
+    else:
+        criterion_feat_v = None
+
+    if conf.loss_type_feat_c != 'none':
+        criterion_feat_c = get_criterion(
+            conf.loss_type_feat_c,
+            dim=32, n_class=7
+        )
+        workspace.log(f'Loss type (fc): {conf.loss_type_feat_c}')
+    else:
+        criterion_feat_c = None
+
     if conf.optimizer_type == 'adam':
         optimizer = torch.optim.Adam(model.parameters(),
                                      lr=conf.lr)
@@ -183,6 +225,9 @@ def main():
           criterion_g,
           criterion_v,
           criterion_c,
+          criterion_feat_g,
+          criterion_feat_v,
+          criterion_feat_c,
           workspace,
           scheduler=scheduler,
           n_epoch=conf.n_epoch,
@@ -195,6 +240,9 @@ def train(model, train_loader, val_loader,
           criterion_g,
           criterion_v,
           criterion_c,
+          criterion_feat_g,
+          criterion_feat_v,
+          criterion_feat_c,
           workspace: Workspace,
           scheduler=None,
           n_epoch=30,
@@ -228,6 +276,10 @@ def train(model, train_loader, val_loader,
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
 
+            loss_feat_g = 0
+            loss_feat_v = 0
+            loss_feat_c = 0
+
             if use_cutmix:
                 x, rand_index, lam = cutmix(x, beta=1.0)
                 tga, tgb = tg, tg[rand_index]
@@ -236,6 +288,11 @@ def train(model, train_loader, val_loader,
 
                 if isinstance(model, (M.BengaliResNet34JPUAF,)):
                     logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
+                elif isinstance(model, (M.BengaliResNet34V3,)):
+                    (feat,
+                    feat_g, logit_g,
+                    feat_v, logit_v,
+                    feat_c, logit_c) = model(x)
                 else:
                     logit_g, logit_v, logit_c = model(x)
 
@@ -251,6 +308,26 @@ def train(model, train_loader, val_loader,
             else:
                 if isinstance(model, (M.BengaliResNet34JPUAF,)):
                     logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
+                elif isinstance(model, (M.BengaliResNet34V3,)):
+                    (feat,
+                    feat_g, logit_g,
+                    feat_v, logit_v,
+                    feat_c, logit_c) = model(x)
+
+                    if criterion_feat_g is None:
+                        pass
+                    else:
+                        loss_feat_g = criterion_feat_g(feat_g, tg)
+
+                    if criterion_feat_v is None:
+                        pass
+                    else:
+                        loss_feat_v = criterion_feat_v(feat_v, tv)
+
+                    if criterion_feat_c is None:
+                        pass
+                    else:
+                        loss_feat_c = criterion_feat_c(feat_c, tc)
                 else:
                     logit_g, logit_v, logit_c = model(x)
 
@@ -258,7 +335,7 @@ def train(model, train_loader, val_loader,
                 loss_v = criterion_v(logit_v, tv)
                 loss_c = criterion_c(logit_c, tc)
 
-            loss = loss_g + loss_v + loss_c
+            loss = loss_g + loss_v + loss_c + loss_feat_g + loss_feat_v + loss_feat_c
 
             if global_step % 20 == 0:
                 workspace.log(f'Iteration={iteration}, Loss={loss}',

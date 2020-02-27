@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,13 +6,19 @@ from pytorch_toolbelt.losses import FocalLoss
 from lib.cutmix import cutmix_criterion
 
 
-def get_criterion(loss_type, weights=None, **kwargs):
+def get_criterion(loss_type,
+                  weights=None, dim=None,
+                  n_class=None, **kwargs):
     if loss_type == 'ce':
         return F.cross_entropy
     elif loss_type == 'weighted_ce':
         return nn.CrossEntropyLoss(weight=weights).cuda()
     elif loss_type == 'ohem':
         return OHEMCrossEntropyLoss(**kwargs).cuda()
+    elif loss_type == 'ns':
+        return NormSoftmaxLoss(dim, n_class).cuda()
+    elif loss_type == 'af':
+        return ArcFaceLoss(dim, n_class, m=0.4).cuda()
     elif loss_type == 'focal':
         return FocalLoss().cuda()
     elif loss_type == 'reduced_focal':
@@ -32,6 +39,60 @@ class OHEMCrossEntropyLoss(nn.Module):
                                ignore_index=-1)
         loss, _ = loss.topk(k=int(self.rate * batch_size))
         return torch.mean(loss)
+
+
+class NormSoftmaxLoss(nn.Module):
+    """http://github.com/azgo14/classification_metric_learning
+    """
+    def __init__(self, dim, n_class, temperature=0.05):
+        super().__init__()
+        self.weight = nn.Parameter(torch.Tensor(n_class, dim))
+        stdv = 1.0 / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+
+        self.temperature = temperature
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, x, t):
+        norm_weight = F.normalize(self.weight, dim=1)
+        logit = F.linear(x, norm_weight)
+
+        loss = self.loss_fn(logit / self.temperature, t)
+        return loss
+
+
+class ArcFaceLoss(nn.Module):
+    def __init__(self, dim, n_class, s=30.0, m=0.5):
+        super().__init__()
+        self.dim = dim
+        self.n_class = n_class
+        self.s = s
+        self.m = m
+        self.cos_m = math.cos(m)
+        self.sin_m = math.sin(m)
+        self.th = math.cos(math.pi - m)
+        self.mm = math.sin(math.pi - m) * m
+        self.weight = nn.Parameter(
+            torch.FloatTensor(self.n_class, self.dim)
+        )
+        nn.init.xavier_uniform_(self.weight)
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, x, t):
+        norm_weight = F.normalize(self.weight, dim=1)
+        cos = F.linear(x, norm_weight)
+        sin = torch.sqrt(1.0 - torch.pow(cos, 2))
+        phi = cos * self.cos_m - sin * self.sin_m
+        phi = torch.where(cos > self.th, phi, cos - self.mm)
+
+        one_hot = torch.zeros(cos.size()).to(x.device)
+        one_hot.scatter_(1, t.view(-1, 1).long(), 1)
+
+        output = (one_hot * phi) + ((1.0 - one_hot) * cos)
+        output *= self.s
+
+        loss = self.loss_fn(output, t)
+        return loss
 
 
 def focal_loss(input, target, OHEM_percent=None, n_class=None):

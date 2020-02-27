@@ -567,6 +567,46 @@ class MultiHeadClassifierSimple(nn.Module):
         logit_c = self.head_c(x)
 
         return logit_g, logit_v, logit_c
+
+
+class HeadV3(nn.Module):
+    def __init__(self, in_channel, dim, n_class):
+        super().__init__()
+        self.fc1 = nn.Linear(in_channel, dim)
+        self.bn1 = nn.BatchNorm1d(dim)
+        self.fc2 = nn.Linear(dim, n_class, bias=False)
+
+    def forward(self, x):
+        f = self.fc1(x)
+        logit = self.fc2(self.bn1(f))
+        return f, logit
+
+
+class MultiHeadV3(nn.Module):
+    def __init__(self, in_channel,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
+        super().__init__()
+        self.n_grapheme = n_grapheme
+        self.n_vowel = n_vowel
+        self.n_consonant = n_consonant
+        self.pool = global_pooling(pooling_type=pooling)
+        self.head_g = HeadV3(in_channel, 128, n_grapheme)
+        self.head_v = HeadV3(in_channel, 32, n_vowel)
+        self.head_c = HeadV3(in_channel, 32, n_consonant)
+
+    def forward(self, x):
+        x = self.pool(x)
+        feat = x.view(x.size(0), -1)
+
+        feat_g, logit_g = self.head_g(feat)
+        feat_v, logit_v = self.head_v(feat)
+        feat_c, logit_c = self.head_c(feat)
+
+        return (feat,
+                feat_g, logit_g,
+                feat_v, logit_v,
+                feat_c, logit_c)
         
 
 class BengaliResNet34(nn.Module):
@@ -610,6 +650,34 @@ class BengaliResNet34V2(nn.Module):
     def forward(self, x):
         x = self.backend(x)
         logit_g, logit_v, logit_c = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
+class BengaliResNet34V3(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(
+            pretrained=pretrained,
+            use_maxblurpool=use_maxblurpool,
+            remove_last_stride=remove_last_stride,
+            n_channel=n_channel)
+        self.multihead = MultiHeadV3(512, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend(x)
+
+        if self.training:
+            return self.multihead(x)
+
+        (feat, feat_g, logit_g,
+               feat_v, logit_v,
+               feat_c, logit_c) = self.multihead(x)
         return logit_g, logit_v, logit_c
 
 
@@ -780,8 +848,10 @@ class BengaliSEResNeXt50NS(nn.Module):
 def create_init_model(arch, **kwargs):
     if arch == 'BengaliResNet34':
         model = BengaliResNet34(**kwargs)
-    if arch == 'BengaliResNet34V2':
+    elif arch == 'BengaliResNet34V2':
         model = BengaliResNet34V2(**kwargs)
+    elif arch == 'BengaliResNet34V3':
+        model = BengaliResNet34V3(**kwargs)
     elif arch == 'BengaliSEResNeXt50':
         model = BengaliSEResNeXt50(**kwargs)
     elif arch == 'BengaliResNet34JPU':

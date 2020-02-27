@@ -1,10 +1,11 @@
-run_id: run-41
+run_id: run-44
 
 data_dir: data
-fold_id: 1
+fold_id: 0
 
 #arch: BengaliResNet34JPUNS3
-arch: BengaliResNet34V2
+#arch: BengaliResNet34V2
+arch: BengaliResNet34V3
 #arch: BengaliResNet34NS
 n_channel: 3
 use_maxblurpool: True
@@ -19,6 +20,8 @@ batch_p: 128
 batch_k: 2
 #n_iter_per_epoch: 1700
 n_iter_per_epoch: 800
+n_low_freq_samples: 10
+
 #input_size: 224
 input_size: 128
 lr: 0.0002
@@ -28,15 +31,19 @@ freeze_bn_epochs:
   - 49
   - 50
 
-loss_type_g: weighted_ce   # ce | weighted_ce | ohem | focal | reduced_focal
-loss_type_v: weighted_ce   # ce | weighted_ce | ohem | focal | reduced_focal
-loss_type_c: weighted_ce   # ce | weighted_ce | ohem | focal | reduced_focal
+loss_type_g: ce   # ce | weighted_ce | ohem | focal | reduced_focal
+loss_type_v: ce   # ce | weighted_ce | ohem | focal | reduced_focal
+loss_type_c: ce   # ce | weighted_ce | ohem | focal | reduced_focal
+
+loss_type_feat_g: ns
+loss_type_feat_v: ns
+loss_type_feat_c: ns
 
 pooling_type: gemp   # gap | gemp
 optimizer_type: ranger   # sgd | adam | ranger
 scheduler_type: rop   # cosanl | rop
 augmentor_type: v3    # v1 | v2 | v3
-sampler_type: random  # random | pk
+sampler_type: random+append  # random | random+append | pk
 
 use_augmentor: true
 cutmix_prob: 0
