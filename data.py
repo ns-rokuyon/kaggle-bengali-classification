@@ -13,23 +13,33 @@ SOURCE_IMAGE_HEIGHT = 137
 SOURCE_IMAGE_WIDTH = 236
 
 
-def read_image(dataset, i, to_pil=True):
+def read_image(dataset, i, to_pil=True, invert_color=False, n_channel=1):
     """Read an image in dataframe as grayscale PIL image
     """
     image_id = dataset.ids[i]
     image = dataset.images[i, :].reshape(137, 236).astype(np.uint8)
+    if invert_color:
+        image = 255 - image
+    if n_channel == 3:
+        image = np.tile(image, (3, 1, 1)).transpose((1, 2, 0))
     if to_pil:
-        return image_id, Image.fromarray(image, 'L')
+        img_type = 'RGB' if n_channel == 3 else 'L'
+        return image_id, Image.fromarray(image, img_type)
     return image_id, image
 
 
-def read_image_df(df, i, to_pil=True):
+def read_image_df(df, i, to_pil=True, invert_color=False, n_channel=1):
     """Read an image in dataframe as grayscale PIL image
     """
     image_id = df.iloc[i, 0]
     image = df.iloc[i, 1:].values.reshape(137, 236).astype(np.uint8)
+    if invert_color:
+        image = 255 - image
+    if n_channel == 3:
+        image = np.tile(image, (3, 1, 1)).transpose((1, 2, 0))
     if to_pil:
-        return image_id, Image.fromarray(image, 'L')
+        img_type = 'RGB' if n_channel == 3 else 'L'
+        return image_id, Image.fromarray(image, img_type)
     return image_id, image
 
 

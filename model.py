@@ -24,7 +24,8 @@ def make_model_1ch_input(model):
 
 def make_backend_resnet34(pretrained=True,
                           use_maxblurpool=False,
-                          remove_last_stride=False):
+                          remove_last_stride=False,
+                          n_channel=1):
     model = resnet34(pretrained=pretrained)
     layers = list(model.children())[:-2]
     backend = nn.Sequential(*layers)
@@ -35,7 +36,10 @@ def make_backend_resnet34(pretrained=True,
         backend[-1][0].conv1.stride = (1, 1)
         backend[-1][0].downsample[0].stride = (1, 1)
         print('Removed: last stride')
-    return make_model_1ch_input(backend)
+    if n_channel == 1:
+        print('Converted: 1ch')
+        return make_model_1ch_input(backend)
+    return backend
 
 
 def make_backend_se_resnext50_32x4d(pretrained=True):
@@ -537,6 +541,32 @@ class MultiHeadClassifier(nn.Module):
         logit_c = self.head_c(x)
 
         return logit_g, logit_v, logit_c
+
+
+class MultiHeadClassifierSimple(nn.Module):
+    def __init__(self, in_channel,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
+        super().__init__()
+        self.n_grapheme = n_grapheme
+        self.n_vowel = n_vowel
+        self.n_consonant = n_consonant
+        self.pool = global_pooling(pooling_type=pooling)
+        self.dropout = nn.Dropout(p=0.25)
+        self.head_g = nn.Linear(in_channel, n_grapheme)
+        self.head_v = nn.Linear(in_channel, n_vowel)
+        self.head_c = nn.Linear(in_channel, n_consonant)
+
+    def forward(self, x):
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.dropout(x)
+
+        logit_g = self.head_g(x)
+        logit_v = self.head_v(x)
+        logit_c = self.head_c(x)
+
+        return logit_g, logit_v, logit_c
         
 
 class BengaliResNet34(nn.Module):
@@ -545,13 +575,37 @@ class BengaliResNet34(nn.Module):
                  pooling='gap',
                  use_maxblurpool=False,
                  remove_last_stride=False,
+                 n_channel=1,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(
             pretrained=pretrained,
             use_maxblurpool=use_maxblurpool,
-            remove_last_stride=remove_last_stride)
+            remove_last_stride=remove_last_stride,
+            n_channel=n_channel)
         self.multihead = MultiHeadClassifier(512, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend(x)
+        logit_g, logit_v, logit_c = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
+class BengaliResNet34V2(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(
+            pretrained=pretrained,
+            use_maxblurpool=use_maxblurpool,
+            remove_last_stride=remove_last_stride,
+            n_channel=n_channel)
+        self.multihead = MultiHeadClassifierSimple(512, pooling=pooling)
 
     def forward(self, x):
         x = self.backend(x)
@@ -580,11 +634,13 @@ class BengaliResNet34JPU(nn.Module):
                  pooling='gap',
                  use_maxblurpool=False,
                  remove_last_stride=False,
+                 n_channel=1,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
                                              use_maxblurpool=use_maxblurpool,
-                                             remove_last_stride=remove_last_stride)
+                                             remove_last_stride=remove_last_stride,
+                                             n_channel=n_channel)
         self.jpu = JPU(in_channels=[128, 256, 512], width=128)
         self.multihead = MultiHeadClassifier(512, pooling=pooling)
 
@@ -610,11 +666,13 @@ class BengaliResNet34NS(nn.Module):
                  dim=64,
                  use_maxblurpool=False,
                  remove_last_stride=False,
+                 n_channel=1,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
                                              use_maxblurpool=use_maxblurpool,
-                                             remove_last_stride=remove_last_stride)
+                                             remove_last_stride=remove_last_stride,
+                                             n_channel=n_channel)
         self.multihead = MultiHeadCenterClassifier2(512, dim=dim, pooling=pooling)
 
     def forward(self, x):
@@ -630,11 +688,13 @@ class BengaliResNet34JPUNS3(nn.Module):
                  dim=64,
                  use_maxblurpool=False,
                  remove_last_stride=False,
+                 n_channel=1,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
                                              use_maxblurpool=use_maxblurpool,
-                                             remove_last_stride=remove_last_stride)
+                                             remove_last_stride=remove_last_stride,
+                                             n_channel=n_channel)
         self.jpu = JPU(in_channels=[128, 256, 512], width=128)
         self.multihead = MultiHeadCenterClassifier3(512, dim=dim, pooling=pooling)
 
@@ -660,11 +720,13 @@ class BengaliResNet34JPUAF(nn.Module):
                  dim=64,
                  use_maxblurpool=False,
                  remove_last_stride=False,
+                 n_channel=1,
                  **kwargs):
         super().__init__()
         self.backend = make_backend_resnet34(pretrained=pretrained,
                                              use_maxblurpool=use_maxblurpool,
-                                             remove_last_stride=remove_last_stride)
+                                             remove_last_stride=remove_last_stride,
+                                             n_channel=n_channel)
         self.jpu = JPU(in_channels=[128, 256, 512], width=128)
         self.multihead = MultiHeadAF(512, dim=dim, pooling=pooling)
 
@@ -718,6 +780,8 @@ class BengaliSEResNeXt50NS(nn.Module):
 def create_init_model(arch, **kwargs):
     if arch == 'BengaliResNet34':
         model = BengaliResNet34(**kwargs)
+    if arch == 'BengaliResNet34V2':
+        model = BengaliResNet34V2(**kwargs)
     elif arch == 'BengaliSEResNeXt50':
         model = BengaliSEResNeXt50(**kwargs)
     elif arch == 'BengaliResNet34JPU':

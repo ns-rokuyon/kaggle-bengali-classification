@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+import torch
 from pathlib import Path
 from torch.utils.data.dataset import Dataset
 
@@ -8,6 +10,8 @@ from data import read_image, load_kfolds
 def bengali_dataset(data_dir, fold_id=0,
                     train_transformer=None,
                     val_transformer=None,
+                    invert_color=False,
+                    n_channel=1,
                     logger=None):
     """Load Bengali dataset (train, val)
     """
@@ -41,25 +45,35 @@ def bengali_dataset(data_dir, fold_id=0,
     if logger:
         logger.info('Create datasets ...')
     train_dataset = BengaliSubsetDataset(df, image_ids, images, train_ids,
-                                         transformer=train_transformer)
+                                         transformer=train_transformer,
+                                         invert_color=invert_color,
+                                         n_channel=n_channel)
     val_dataset = BengaliSubsetDataset(df, image_ids, images, val_ids,
-                                       transformer=val_transformer)
+                                       transformer=val_transformer,
+                                       invert_color=invert_color,
+                                       n_channel=n_channel)
     return train_dataset, val_dataset
 
 
 class BengaliDataset(Dataset):
-    def __init__(self, df, image_ids, images, transformer=None):
+    def __init__(self, df, image_ids, images,
+                 transformer=None, invert_color=False, n_channel=1):
         self.df = df
         self.images = images
         self.ids = image_ids
         self.transformer = transformer
+        self.invert_color = invert_color
+        self.n_channel = n_channel
         assert len(self.df) == len(self.images)
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, i):
-        _, im = read_image(self, i, to_pil=True)
+        _, im = read_image(self, i,
+                           to_pil=True,
+                           invert_color=self.invert_color,
+                           n_channel=self.n_channel)
         if self.transformer:
             im = self.transformer(im)
         labels = self.get_multilabels(i)
@@ -75,8 +89,11 @@ class BengaliDataset(Dataset):
 
 class BengaliSubsetDataset(BengaliDataset):
     def __init__(self, df, image_ids, images, active_ids,
-                 transformer=None):
-        super().__init__(df, image_ids, images, transformer=transformer)
+                 transformer=None,
+                 invert_color=False,
+                 n_channel=1):
+        super().__init__(df, image_ids, images,
+                         transformer=transformer, invert_color=invert_color, n_channel=n_channel)
         self.active_ids = active_ids
 
     def __len__(self):
@@ -91,12 +108,21 @@ class BengaliSubsetDataset(BengaliDataset):
 
     def get_class_weights_g(self):
         g_counts = self.df.grapheme_root.value_counts()
-        return g_counts[list(range(len(g_counts)))]
+        ws = np.array(list(g_counts[list(range(len(g_counts)))]),
+                      dtype=np.float32)
+        return torch.tensor((1 / ws) / (1 / ws).max(),
+                            requires_grad=False)
 
     def get_class_weights_v(self):
         v_counts = self.df.vowel_diacritic.value_counts()
-        return v_counts[list(range(len(v_counts)))]
+        ws = np.array(list(v_counts[list(range(len(v_counts)))]),
+                      dtype=np.float32)
+        return torch.tensor((1 / ws) / (1 / ws).max(),
+                            requires_grad=False)
 
     def get_class_weights_c(self):
         c_counts = self.df.consonant_diacritic.value_counts()
-        return c_counts[list(range(len(c_counts)))]
+        ws = np.array(list(c_counts[list(range(len(c_counts)))]),
+                      dtype=np.float32)
+        return torch.tensor((1 / ws) / (1 / ws).max(),
+                            requires_grad=False)
