@@ -9,6 +9,7 @@ defs = {
     'n_epoch': (int, 30),
     'n_iter_per_epoch': (int, 1600),
     'arch': (str, 'BengaliSEResNeXt50'),
+    'n_channel': (int, 1),
     'use_maxblurpool': (bool, False),
     'remove_last_stride': (bool, False),
     'batch_size': (int, 64),
@@ -23,14 +24,15 @@ defs = {
     'pooling_type': (str, 'gap'),   # gap | gemp
     'optimizer_type': (str, 'adam'),    # adam | sgd
     'scheduler_type': (str, 'cosanl'),  # cosanl | rop
-    'augmentor_type': (str, 'v1'),  # v1 | v2
+    'augmentor_type': (str, 'v1'),  # v1 | v2 | v3
     'sampler_type': (str, 'random'),    # random | pk
     'use_augmentor': (bool, False),
     'cutmix_prob': (float, 0.0),
     'feat_dim': (int, 64),
     'rop_patience': (int, 3),
     'rop_factor': (float, 0.1),
-    'enable_random_morph': (bool, False)
+    'enable_random_morph': (bool, False),
+    'invert_color': (bool, False)
 }
 
 
