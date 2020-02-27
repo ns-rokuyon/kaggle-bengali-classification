@@ -5,6 +5,7 @@ import random
 from PIL import Image
 from torchvision import transforms
 from data import SOURCE_IMAGE_HEIGHT, SOURCE_IMAGE_WIDTH
+from lib.augmix import RandomAugMix
 
 
 def create_transformer_v1(input_size=None, augmentor=None):
@@ -75,18 +76,45 @@ def create_augmentor_v1(enable_random_morph=False):
     return augmentor
 
 
-def create_augmentor_v2(enable_random_morph=False):
+def create_augmentor_v2(enable_random_morph=False, invert_color=False):
+    fill_value = 0 if invert_color else 255
+
     if enable_random_morph:
         ts = [
             alb.ShiftScaleRotate(rotate_limit=10, p=0.5),
             RandomMorph(p=0.5),
-            alb.Cutout(p=0.5, fill_value=255)
+            alb.Cutout(p=0.5, fill_value=fill_value)
         ]
     else:
         ts = [
             alb.ShiftScaleRotate(rotate_limit=10, p=0.5),
             alb.Blur(p=0.5),
-            alb.Cutout(p=0.5, fill_value=255)
+            alb.Cutout(p=0.5, fill_value=fill_value)
+        ]
+    augmentor = alb.Compose(ts)
+    return augmentor
+
+
+def create_augmentor_v3(input_size, enable_random_morph=False, invert_color=False):
+    fill_value = 0 if invert_color else 255
+    h, w = input_size
+
+    if enable_random_morph:
+        ts = [
+            RandomMorph(p=0.5, _max=3),
+            alb.OneOf([
+                RandomAugMix(p=0.8),
+                alb.Cutout(p=0.8, num_holes=1,
+                           max_h_size=h // 4, max_w_size=w // 4, fill_value=fill_value)
+            ], p=1.0)
+        ]
+    else:
+        ts = [
+            alb.OneOf([
+                RandomAugMix(p=0.8),
+                alb.Cutout(p=0.8, num_holes=1,
+                           max_h_size=h // 4, max_w_size=w // 4, fill_value=fill_value)
+            ], p=1.0)
         ]
     augmentor = alb.Compose(ts)
     return augmentor

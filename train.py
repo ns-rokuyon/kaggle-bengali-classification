@@ -17,7 +17,10 @@ from preprocessing import (
     create_transformer_v1,
     create_testing_transformer_v1,
     create_augmentor_v1,
-    create_augmentor_v2
+    create_augmentor_v2,
+    create_augmentor_v3,
+    SOURCE_IMAGE_HEIGHT,
+    SOURCE_IMAGE_WIDTH
 )
 from evaluation import hierarchical_macro_averaged_recall
 from optim import CosineLRWithRestarts, Ranger
@@ -54,7 +57,16 @@ def main():
             )
         elif conf.augmentor_type == 'v2':
             augmentor = create_augmentor_v2(
-                enable_random_morph=conf.enable_random_morph
+                enable_random_morph=conf.enable_random_morph,
+                invert_color=conf.invert_color
+            )
+        elif conf.augmentor_type == 'v3':
+            input_size = (conf.input_size, conf.input_size) if conf.input_size else \
+                         (SOURCE_IMAGE_HEIGHT, SOURCE_IMAGE_WIDTH)
+            augmentor = create_augmentor_v3(
+                input_size,
+                enable_random_morph=conf.enable_random_morph,
+                invert_color=conf.invert_color
             )
         else:
             raise ValueError(conf.augmentor_type)
@@ -77,6 +89,8 @@ def main():
                                                  fold_id=fold_id,
                                                  train_transformer=train_transformer,
                                                  val_transformer=val_transformer,
+                                                 invert_color=conf.invert_color,
+                                                 n_channel=conf.n_channel,
                                                  logger=workspace.logger)
     workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
 
@@ -113,7 +127,8 @@ def main():
                               pooling=conf.pooling_type,
                               dim=conf.feat_dim,
                               use_maxblurpool=conf.use_maxblurpool,
-                              remove_last_stride=conf.remove_last_stride)
+                              remove_last_stride=conf.remove_last_stride,
+                              n_channel=conf.n_channel)
     model = model.cuda()
 
     criterion_g = get_criterion(
