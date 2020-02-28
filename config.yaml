@@ -1,4 +1,4 @@
-run_id: run-44
+run_id: run-46
 
 data_dir: data
 fold_id: 0
@@ -20,7 +20,8 @@ batch_p: 128
 batch_k: 2
 #n_iter_per_epoch: 1700
 n_iter_per_epoch: 800
-n_low_freq_samples: 10
+n_low_freq_samples: 20
+n_class_low_freq: 70
 
 #input_size: 224
 input_size: 128

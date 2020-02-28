@@ -16,6 +16,7 @@ defs = {
     'batch_p': (int, 64),
     'batch_k': (int, 2),
     'n_low_freq_samples': (int, 10),
+    'n_class_low_freq': (int, 60),
     'input_size': (int, 128),
     'lr': (float, 1e-3),
     'freeze_bn_epochs': (lambda xs: list(map(int, xs)), []),

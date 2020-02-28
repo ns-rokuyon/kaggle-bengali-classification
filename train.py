@@ -93,7 +93,7 @@ def main():
                                                  n_channel=conf.n_channel,
                                                  logger=workspace.logger)
     workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
-    train_dataset.set_low_freq_groups()
+    train_dataset.set_low_freq_groups(n_class=conf.n_class_low_freq)
 
     if conf.sampler_type == 'pk':
         sampler = PKSampler(train_dataset,
