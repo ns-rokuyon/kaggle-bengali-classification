@@ -1,4 +1,4 @@
-run_id: run-46
+run_id: run-47
 
 data_dir: data
 fold_id: 0
@@ -36,9 +36,9 @@ loss_type_g: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_v: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_c: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 
-loss_type_feat_g: ns
-loss_type_feat_v: ns
-loss_type_feat_c: ns
+loss_type_feat_g: af
+loss_type_feat_v: none
+loss_type_feat_c: none
 
 pooling_type: gemp   # gap | gemp
 optimizer_type: ranger   # sgd | adam | ranger

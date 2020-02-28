@@ -18,7 +18,7 @@ def get_criterion(loss_type,
     elif loss_type == 'ns':
         return NormSoftmaxLoss(dim, n_class).cuda()
     elif loss_type == 'af':
-        return ArcFaceLoss(dim, n_class, m=0.4).cuda()
+        return ArcFaceLoss(dim, n_class, s=8, m=0.4).cuda()
     elif loss_type == 'focal':
         return FocalLoss().cuda()
     elif loss_type == 'reduced_focal':
@@ -54,8 +54,9 @@ class NormSoftmaxLoss(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, x, t):
+        norm_x = F.normalize(x)
         norm_weight = F.normalize(self.weight, dim=1)
-        logit = F.linear(x, norm_weight)
+        logit = F.linear(norm_x, norm_weight)
 
         loss = self.loss_fn(logit / self.temperature, t)
         return loss
@@ -79,8 +80,9 @@ class ArcFaceLoss(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, x, t):
+        norm_x = F.normalize(x)
         norm_weight = F.normalize(self.weight, dim=1)
-        cos = F.linear(x, norm_weight)
+        cos = F.linear(norm_x, norm_weight)
         sin = torch.sqrt(1.0 - torch.pow(cos, 2))
         phi = cos * self.cos_m - sin * self.sin_m
         phi = torch.where(cos > self.th, phi, cos - self.mm)
