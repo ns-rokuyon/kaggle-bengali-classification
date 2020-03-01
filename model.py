@@ -42,21 +42,32 @@ def make_backend_resnet34(pretrained=True,
     return backend
 
 
-def make_backend_se_resnext50_32x4d(pretrained=True):
+def make_backend_se_resnext50_32x4d(pretrained=True,
+                                    use_maxblurpool=False,
+                                    remove_last_stride=False,
+                                    n_channel=1):
     model = pretrainedmodels.se_resnext50_32x4d(
         pretrained='imagenet' if pretrained else None
     )
-    weight = model.layer0[0].weight
-    conv1 = nn.Conv2d(1, 64,
-                      kernel_size=7, stride=2, padding=3, bias=False)
-    conv1.weight = nn.Parameter(torch.mean(weight, dim=1, keepdim=True))
-    layer0 = nn.Sequential(
-        conv1,
-        model.layer0[1],
-        model.layer0[2],
-        model.layer0[3]
-    )
-    model.layer0 = layer0
+    if use_maxblurpool:
+        # TODO
+        print('Use: MaxBlurPool2d')
+    if remove_last_stride:
+        # TODO
+        print('Removed: last stride')
+    if n_channel == 1:
+        weight = model.layer0[0].weight
+        conv1 = nn.Conv2d(1, 64,
+                        kernel_size=7, stride=2, padding=3, bias=False)
+        conv1.weight = nn.Parameter(torch.mean(weight, dim=1, keepdim=True))
+        layer0 = nn.Sequential(
+            conv1,
+            model.layer0[1],
+            model.layer0[2],
+            model.layer0[3]
+        )
+        model.layer0 = layer0
+        print('Converted: 1ch')
     del model.avg_pool
     del model.dropout
     del model.last_linear
@@ -89,6 +100,29 @@ def set_batchnorm_eval(module):
     classname = module.__class__.__name__
     if classname.find('BatchNorm') != -1:
         module.eval()
+
+
+def weights_init_kaiming(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        nn.init.kaiming_normal_(m.weight, a=0, mode='fan_out')
+        nn.init.constant_(m.bias, 0.0)
+    elif classname.find('Conv') != -1:
+        nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in')
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0.0)
+    elif classname.find('BatchNorm') != -1:
+        if m.affine:
+            nn.init.constant_(m.weight, 1.0)
+            nn.init.constant_(m.bias, 0.0)
+
+
+def weights_init_classifier(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        nn.init.normal_(m.weight, std=0.001)
+        if m.bias:
+            nn.init.constant_(m.bias, 0.0)
 
 
 def gemp(x, p=3, eps=1e-6):
@@ -576,6 +610,11 @@ class HeadV3(nn.Module):
         self.bn1 = nn.BatchNorm1d(dim)
         self.fc2 = nn.Linear(dim, n_class, bias=False)
 
+        self.bn1.bias.requires_grad_(False)
+        self.bn1.apply(weights_init_kaiming)
+        self.fc1.apply(weights_init_kaiming)
+        self.fc2.apply(weights_init_classifier)
+
     def forward(self, x):
         f = self.fc1(x)
         logit = self.fc2(self.bn1(f))
@@ -607,7 +646,54 @@ class MultiHeadV3(nn.Module):
                 feat_g, logit_g,
                 feat_v, logit_v,
                 feat_c, logit_c)
+
+
+class HeadV4(nn.Module):
+    def __init__(self, in_channel, dim, n_class):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Linear(in_channel, dim, bias=False),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm1d(dim),
+            nn.Linear(dim, dim, bias=False),
+            nn.BatchNorm1d(dim)
+        )
+        self.classifier = nn.Linear(dim, n_class, bias=False)
+
+    def forward(self, x):
+        f = self.features(x)
+        logit = self.classifier(f)
+        return f, logit
         
+
+class MultiHeadV4(nn.Module):
+    def __init__(self, in_channel,
+                 n_grapheme=168, n_vowel=11, n_consonant=7,
+                 pooling='gap'):
+        super().__init__()
+        self.n_grapheme = n_grapheme
+        self.n_vowel = n_vowel
+        self.n_consonant = n_consonant
+        self.pool = global_pooling(pooling_type=pooling)
+        self.bn = nn.BatchNorm1d(in_channel)
+        self.head_g = HeadV4(in_channel, 256, n_grapheme)
+        self.head_v = HeadV4(in_channel, 64, n_vowel)
+        self.head_c = HeadV4(in_channel, 64, n_consonant)
+
+    def forward(self, x):
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.bn(x)
+
+        feat_g, logit_g = self.head_g(x)
+        feat_v, logit_v = self.head_v(x)
+        feat_c, logit_c = self.head_c(x)
+
+        return (x,
+                feat_g, logit_g,
+                feat_v, logit_v,
+                feat_c, logit_c)
+
 
 class BengaliResNet34(nn.Module):
     def __init__(self,
@@ -668,6 +754,63 @@ class BengaliResNet34V3(nn.Module):
             remove_last_stride=remove_last_stride,
             n_channel=n_channel)
         self.multihead = MultiHeadV3(512, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend(x)
+
+        if self.training:
+            return self.multihead(x)
+
+        (feat, feat_g, logit_g,
+               feat_v, logit_v,
+               feat_c, logit_c) = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
+class BengaliResNet34V4(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(
+            pretrained=pretrained,
+            use_maxblurpool=use_maxblurpool,
+            remove_last_stride=remove_last_stride,
+            n_channel=n_channel)
+        self.multihead = MultiHeadV4(512, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend(x)
+
+        if self.training:
+            return self.multihead(x)
+
+        (feat, feat_g, logit_g,
+               feat_v, logit_v,
+               feat_c, logit_c) = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
+class BengaliSEResNeXt50V4(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_se_resnext50_32x4d(
+            pretrained=pretrained,
+            use_maxblurpool=use_maxblurpool,
+            remove_last_stride=remove_last_stride,
+            n_channel=n_channel
+        )
+        self.multihead = MultiHeadV4(2048, pooling=pooling)
 
     def forward(self, x):
         x = self.backend(x)
@@ -852,6 +995,10 @@ def create_init_model(arch, **kwargs):
         model = BengaliResNet34V2(**kwargs)
     elif arch == 'BengaliResNet34V3':
         model = BengaliResNet34V3(**kwargs)
+    elif arch == 'BengaliResNet34V4':
+        model = BengaliResNet34V4(**kwargs)
+    elif arch == 'BengaliSEResNeXt50V4':
+        model = BengaliSEResNeXt50V4(**kwargs)
     elif arch == 'BengaliSEResNeXt50':
         model = BengaliSEResNeXt50(**kwargs)
     elif arch == 'BengaliResNet34JPU':

@@ -26,6 +26,7 @@ defs = {
     'loss_type_feat_g': (str, 'none'),
     'loss_type_feat_v': (str, 'none'),
     'loss_type_feat_c': (str, 'none'),
+    'feat_loss_weight': (float, 1.0),
     'pooling_type': (str, 'gap'),   # gap | gemp
     'optimizer_type': (str, 'adam'),    # adam | sgd
     'scheduler_type': (str, 'cosanl'),  # cosanl | rop

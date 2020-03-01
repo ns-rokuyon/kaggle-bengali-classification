@@ -232,7 +232,8 @@ def main():
           scheduler=scheduler,
           n_epoch=conf.n_epoch,
           cutmix_prob=conf.cutmix_prob,
-          freeze_bn_epochs=conf.freeze_bn_epochs)
+          freeze_bn_epochs=conf.freeze_bn_epochs,
+          feat_loss_weight=conf.feat_loss_weight)
 
 
 def train(model, train_loader, val_loader,
@@ -247,7 +248,8 @@ def train(model, train_loader, val_loader,
           scheduler=None,
           n_epoch=30,
           cutmix_prob=0,
-          freeze_bn_epochs=None):
+          freeze_bn_epochs=None,
+          feat_loss_weight=1.0):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
     workspace.plot_score('val/score', score, 0)
@@ -288,7 +290,9 @@ def train(model, train_loader, val_loader,
 
                 if isinstance(model, (M.BengaliResNet34JPUAF,)):
                     logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
-                elif isinstance(model, (M.BengaliResNet34V3,)):
+                elif isinstance(model, (M.BengaliResNet34V3,
+                                        M.BengaliResNet34V4,
+                                        M.BengaliSEResNeXt50V4)):
                     (feat,
                     feat_g, logit_g,
                     feat_v, logit_v,
@@ -308,7 +312,9 @@ def train(model, train_loader, val_loader,
             else:
                 if isinstance(model, (M.BengaliResNet34JPUAF,)):
                     logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
-                elif isinstance(model, (M.BengaliResNet34V3,)):
+                elif isinstance(model, (M.BengaliResNet34V3,
+                                        M.BengaliResNet34V4,
+                                        M.BengaliSEResNeXt50V4)):
                     (feat,
                     feat_g, logit_g,
                     feat_v, logit_v,
@@ -335,7 +341,8 @@ def train(model, train_loader, val_loader,
                 loss_v = criterion_v(logit_v, tv)
                 loss_c = criterion_c(logit_c, tc)
 
-            loss = loss_g + loss_v + loss_c + loss_feat_g + loss_feat_v + loss_feat_c
+            loss = loss_g + loss_v + loss_c + feat_loss_weight * (
+                loss_feat_g + loss_feat_v + loss_feat_c)
 
             if global_step % 20 == 0:
                 workspace.log(f'Iteration={iteration}, Loss={loss}',

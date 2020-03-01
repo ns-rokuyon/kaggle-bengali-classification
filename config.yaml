@@ -40,6 +40,8 @@ loss_type_feat_g: af
 loss_type_feat_v: none
 loss_type_feat_c: none
 
+feat_loss_weight: 1.0
+
 pooling_type: gemp   # gap | gemp
 optimizer_type: ranger   # sgd | adam | ranger
 scheduler_type: rop   # cosanl | rop
