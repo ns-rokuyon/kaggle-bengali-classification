@@ -28,9 +28,10 @@ input_size: 128
 lr: 0.0002
 #lr: 0.001
 #lr: 0.01
-freeze_bn_epochs:
-  - 49
-  - 50
+
+#freeze_bn_epochs:
+#  - 49
+#  - 50
 
 loss_type_g: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_v: ce   # ce | weighted_ce | ohem | focal | reduced_focal

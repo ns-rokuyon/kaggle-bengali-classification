@@ -606,6 +606,7 @@ class MultiHeadClassifierSimple(nn.Module):
 class HeadV3(nn.Module):
     def __init__(self, in_channel, dim, n_class):
         super().__init__()
+        self.dim = dim
         self.fc1 = nn.Linear(in_channel, dim)
         self.bn1 = nn.BatchNorm1d(dim)
         self.fc2 = nn.Linear(dim, n_class, bias=False)
@@ -651,6 +652,7 @@ class MultiHeadV3(nn.Module):
 class HeadV4(nn.Module):
     def __init__(self, in_channel, dim, n_class):
         super().__init__()
+        self.dim = dim
         self.features = nn.Sequential(
             nn.Linear(in_channel, dim, bias=False),
             nn.ReLU(inplace=True),

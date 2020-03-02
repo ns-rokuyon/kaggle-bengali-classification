@@ -165,9 +165,10 @@ def main():
     workspace.log(f'Loss type (c): {conf.loss_type_c}')
 
     if conf.loss_type_feat_g != 'none':
+        assert isinstance(model, (M.BengaliResNet34V3, M.BengaliResNet34V4))
         criterion_feat_g = get_criterion(
             conf.loss_type_feat_g,
-            dim=128, n_class=168,
+            dim=model.multihead.head_g.dim, n_class=168,
             s=conf.af_scale_g
         )
         workspace.log(f'Loss type (fg): {conf.loss_type_feat_g}')
@@ -175,9 +176,10 @@ def main():
         criterion_feat_g = None
 
     if conf.loss_type_feat_v != 'none':
+        assert isinstance(model, (M.BengaliResNet34V3, M.BengaliResNet34V4))
         criterion_feat_v = get_criterion(
             conf.loss_type_feat_v,
-            dim=32, n_class=11,
+            dim=model.multihead.head_v.dim, n_class=11,
             s=conf.af_scale_v
         )
         workspace.log(f'Loss type (fv): {conf.loss_type_feat_v}')
@@ -185,9 +187,10 @@ def main():
         criterion_feat_v = None
 
     if conf.loss_type_feat_c != 'none':
+        assert isinstance(model, (M.BengaliResNet34V3, M.BengaliResNet34V4))
         criterion_feat_c = get_criterion(
             conf.loss_type_feat_c,
-            dim=32, n_class=7,
+            dim=model.multihead.head_c.dim, n_class=7,
             s=conf.af_scale_c
         )
         workspace.log(f'Loss type (fc): {conf.loss_type_feat_c}')
