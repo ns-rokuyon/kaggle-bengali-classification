@@ -8,7 +8,7 @@ from lib.cutmix import cutmix_criterion
 
 def get_criterion(loss_type,
                   weights=None, dim=None,
-                  n_class=None, **kwargs):
+                  n_class=None, s=30, **kwargs):
     if loss_type == 'ce':
         return F.cross_entropy
     elif loss_type == 'weighted_ce':
@@ -18,7 +18,7 @@ def get_criterion(loss_type,
     elif loss_type == 'ns':
         return NormSoftmaxLoss(dim, n_class).cuda()
     elif loss_type == 'af':
-        return ArcFaceLoss(dim, n_class, s=8, m=0.4).cuda()
+        return ArcFaceLoss(dim, n_class, s=s, m=0.4).cuda()
     elif loss_type == 'focal':
         return FocalLoss().cuda()
     elif loss_type == 'reduced_focal':

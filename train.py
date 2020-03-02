@@ -23,7 +23,7 @@ from preprocessing import (
     SOURCE_IMAGE_WIDTH
 )
 from evaluation import hierarchical_macro_averaged_recall
-from optim import CosineLRWithRestarts, Ranger
+from optim import CosineLRWithRestarts, Ranger, RAdam
 from loss import get_criterion
 from sampler import PKSampler, LowFreqSampleMixinBatchSampler
 from config import Config
@@ -167,7 +167,8 @@ def main():
     if conf.loss_type_feat_g != 'none':
         criterion_feat_g = get_criterion(
             conf.loss_type_feat_g,
-            dim=128, n_class=168
+            dim=128, n_class=168,
+            s=conf.af_scale_g
         )
         workspace.log(f'Loss type (fg): {conf.loss_type_feat_g}')
     else:
@@ -176,7 +177,8 @@ def main():
     if conf.loss_type_feat_v != 'none':
         criterion_feat_v = get_criterion(
             conf.loss_type_feat_v,
-            dim=32, n_class=11
+            dim=32, n_class=11,
+            s=conf.af_scale_v
         )
         workspace.log(f'Loss type (fv): {conf.loss_type_feat_v}')
     else:
@@ -185,7 +187,8 @@ def main():
     if conf.loss_type_feat_c != 'none':
         criterion_feat_c = get_criterion(
             conf.loss_type_feat_c,
-            dim=32, n_class=7
+            dim=32, n_class=7,
+            s=conf.af_scale_c
         )
         workspace.log(f'Loss type (fc): {conf.loss_type_feat_c}')
     else:
@@ -203,6 +206,10 @@ def main():
         optimizer = Ranger(model.parameters(),
                            lr=conf.lr,
                            weight_decay=1e-4)
+    elif conf.optimizer_type == 'radam':
+        optimizer = RAdam(model.parameters(),
+                          lr=conf.lr,
+                          weight_decay=1e-4)
     else:
         raise ValueError(conf.optimizer_type)
     workspace.log(f'Optimizer type: {conf.optimizer_type}')
@@ -210,7 +217,7 @@ def main():
     if conf.scheduler_type == 'cosanl':
         scheduler = CosineLRWithRestarts(
             optimizer, conf.batch_size, len(train_dataset),
-            restart_period=6, t_mult=1.0
+            restart_period=10, t_mult=1.0
         )
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -294,9 +301,9 @@ def train(model, train_loader, val_loader,
                                         M.BengaliResNet34V4,
                                         M.BengaliSEResNeXt50V4)):
                     (feat,
-                    feat_g, logit_g,
-                    feat_v, logit_v,
-                    feat_c, logit_c) = model(x)
+                     feat_g, logit_g,
+                     feat_v, logit_v,
+                     feat_c, logit_c) = model(x)
                 else:
                     logit_g, logit_v, logit_c = model(x)
 
@@ -316,9 +323,9 @@ def train(model, train_loader, val_loader,
                                         M.BengaliResNet34V4,
                                         M.BengaliSEResNeXt50V4)):
                     (feat,
-                    feat_g, logit_g,
-                    feat_v, logit_v,
-                    feat_c, logit_c) = model(x)
+                     feat_g, logit_g,
+                     feat_v, logit_v,
+                     feat_c, logit_c) = model(x)
 
                     if criterion_feat_g is None:
                         pass

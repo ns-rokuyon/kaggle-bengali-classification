@@ -28,7 +28,7 @@ defs = {
     'loss_type_feat_c': (str, 'none'),
     'feat_loss_weight': (float, 1.0),
     'pooling_type': (str, 'gap'),   # gap | gemp
-    'optimizer_type': (str, 'adam'),    # adam | sgd
+    'optimizer_type': (str, 'adam'),    # adam | sgd | ranger | radam
     'scheduler_type': (str, 'cosanl'),  # cosanl | rop
     'augmentor_type': (str, 'v1'),  # v1 | v2 | v3
     'sampler_type': (str, 'random'),    # random | pk
@@ -38,7 +38,10 @@ defs = {
     'rop_patience': (int, 3),
     'rop_factor': (float, 0.1),
     'enable_random_morph': (bool, False),
-    'invert_color': (bool, False)
+    'invert_color': (bool, False),
+    'af_scale_g': (float, 8),
+    'af_scale_v': (float, 3),
+    'af_scale_c': (float, 3)
 }
 
 
