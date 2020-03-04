@@ -50,10 +50,11 @@ def make_backend_se_resnext50_32x4d(pretrained=True,
         pretrained='imagenet' if pretrained else None
     )
     if use_maxblurpool:
-        # TODO
+        model.layer0[3] = MaxBlurPool2d(3, True)
         print('Use: MaxBlurPool2d')
     if remove_last_stride:
-        # TODO
+        model.layer4[0].conv2.stride = (1, 1)
+        model.layer4[0].downsample[0].stride = (1, 1)
         print('Removed: last stride')
     if n_channel == 1:
         weight = model.layer0[0].weight
@@ -815,7 +816,7 @@ class BengaliSEResNeXt50V4(nn.Module):
         self.multihead = MultiHeadV4(2048, pooling=pooling)
 
     def forward(self, x):
-        x = self.backend(x)
+        x = self.backend.features(x)
 
         if self.training:
             return self.multihead(x)

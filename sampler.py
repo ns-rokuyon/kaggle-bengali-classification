@@ -98,13 +98,13 @@ class LowFreqSampleMixinBatchSampler:
         if self.drop_last:
             return len(self.sampler) // self.base_batch_size
         else:
-            return (len(self.sampler) + self.base_batch_size - 1) // self.batch_size
+            return (len(self.sampler) + self.base_batch_size - 1) // self.base_batch_size
 
     def __iter__(self):
         batch = []
         for idx in self.sampler:
             batch.append(idx)
-            if len(batch) == self.batch_size:
+            if len(batch) == self.base_batch_size:
                 appends = self.dataset.random_sample_ilist_from_low_freq_groups(self.n_low_freq_samples)
                 yield batch + appends
                 batch = []

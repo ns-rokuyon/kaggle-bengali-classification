@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -28,6 +29,10 @@ from loss import get_criterion
 from sampler import PKSampler, LowFreqSampleMixinBatchSampler
 from config import Config
 from lib.cutmix import cutmix, cutmix_criterion
+
+
+cv2.setNumThreads(0)
+cv2.ocl.setUseOpenCL(False)
 
 
 def parse_args():
@@ -165,7 +170,9 @@ def main():
     workspace.log(f'Loss type (c): {conf.loss_type_c}')
 
     if conf.loss_type_feat_g != 'none':
-        assert isinstance(model, (M.BengaliResNet34V3, M.BengaliResNet34V4))
+        assert isinstance(model, (M.BengaliResNet34V3,
+                                  M.BengaliResNet34V4,
+                                  M.BengaliSEResNeXt50V4))
         criterion_feat_g = get_criterion(
             conf.loss_type_feat_g,
             dim=model.multihead.head_g.dim, n_class=168,
@@ -176,7 +183,9 @@ def main():
         criterion_feat_g = None
 
     if conf.loss_type_feat_v != 'none':
-        assert isinstance(model, (M.BengaliResNet34V3, M.BengaliResNet34V4))
+        assert isinstance(model, (M.BengaliResNet34V3,
+                                  M.BengaliResNet34V4,
+                                  M.BengaliSEResNeXt50V4))
         criterion_feat_v = get_criterion(
             conf.loss_type_feat_v,
             dim=model.multihead.head_v.dim, n_class=11,
@@ -187,7 +196,9 @@ def main():
         criterion_feat_v = None
 
     if conf.loss_type_feat_c != 'none':
-        assert isinstance(model, (M.BengaliResNet34V3, M.BengaliResNet34V4))
+        assert isinstance(model, (M.BengaliResNet34V3,
+                                  M.BengaliResNet34V4,
+                                  M.BengaliSEResNeXt50V4))
         criterion_feat_c = get_criterion(
             conf.loss_type_feat_c,
             dim=model.multihead.head_c.dim, n_class=7,
@@ -282,6 +293,11 @@ def train(model, train_loader, val_loader,
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
             global_step += 1
+
+            if global_step == 0:
+                workspace.log(f'Check tensor size: x={x.size()}, '
+                              f'tg={tg.size()}, tv={tv.size()}, tc={tc.size()}')
+
             r = np.random.rand(1)
             use_cutmix = r < cutmix_prob
 

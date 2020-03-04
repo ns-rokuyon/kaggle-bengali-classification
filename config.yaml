@@ -1,18 +1,17 @@
-run_id: run-50
+run_id: run-54
 
 data_dir: data
-fold_id: 0
+fold_id: 3
 
-#arch: BengaliResNet34JPUNS3
-#arch: BengaliResNet34V2
-arch: BengaliResNet34V4
-#arch: BengaliResNet34NS
+#arch: BengaliResNet34V4
+arch: BengaliSEResNeXt50V4
 n_channel: 3
 use_maxblurpool: True
 remove_last_stride: True
 
-n_epoch: 50
-batch_size: 96
+n_epoch: 80
+batch_size: 88  # SEResNeXt50
+#batch_size: 96  # ResNet34
 #batch_size: 128
 #batch_size: 196
 #batch_size: 256
@@ -20,7 +19,7 @@ batch_p: 128
 batch_k: 2
 #n_iter_per_epoch: 1700
 n_iter_per_epoch: 800
-n_low_freq_samples: 32
+n_low_freq_samples: 16
 n_class_low_freq: 80
 
 #input_size: 224
