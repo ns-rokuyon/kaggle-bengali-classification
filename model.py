@@ -798,6 +798,71 @@ class BengaliResNet34V4(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class BengaliResNet34AGeMV4(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 use_maxblurpool=False,
+                 remove_last_stride=False,
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        self.backend = make_backend_resnet34(
+            pretrained=pretrained,
+            use_maxblurpool=use_maxblurpool,
+            remove_last_stride=remove_last_stride,
+            n_channel=n_channel)
+        _stride = 1 if remove_last_stride else 2
+        self.att1 = nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=3, stride=_stride, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=1, stride=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 512, kernel_size=1, stride=1),
+            nn.Sigmoid()
+        )
+        self.att21 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=1),
+            nn.Sigmoid()
+        )
+        self.att22 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=1),
+            nn.Sigmoid()
+        )
+        self.multihead = MultiHeadV4(512, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend[0](x)
+        x = self.backend[1](x)
+        x = self.backend[2](x)
+        x = self.backend[3](x)
+        x = self.backend[4](x)
+        x = self.backend[5](x)
+        x35 = self.backend[6](x)
+        x40 = self.backend[7][0](x35)
+        x41 = self.backend[7][1](x40)
+        x = self.backend[7][2](x41)
+
+        a1 = self.att1(x35)
+        a21 = self.att21(a1 * x40)
+        attention = self.att22(a21 * x41)
+
+        x = x + attention * x
+
+        if self.training:
+            return self.multihead(x)
+
+        (feat, feat_g, logit_g,
+               feat_v, logit_v,
+               feat_c, logit_c) = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
 class BengaliSEResNeXt50V4(nn.Module):
     def __init__(self,
                  pretrained=True,
@@ -1000,6 +1065,8 @@ def create_init_model(arch, **kwargs):
         model = BengaliResNet34V3(**kwargs)
     elif arch == 'BengaliResNet34V4':
         model = BengaliResNet34V4(**kwargs)
+    elif arch == 'BengaliResNet34AGeMV4':
+        model = BengaliResNet34AGeMV4(**kwargs)
     elif arch == 'BengaliSEResNeXt50V4':
         model = BengaliSEResNeXt50V4(**kwargs)
     elif arch == 'BengaliSEResNeXt50':

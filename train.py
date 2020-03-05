@@ -172,6 +172,7 @@ def main():
     if conf.loss_type_feat_g != 'none':
         assert isinstance(model, (M.BengaliResNet34V3,
                                   M.BengaliResNet34V4,
+                                  M.BengaliResNet34AGeMV4,
                                   M.BengaliSEResNeXt50V4))
         criterion_feat_g = get_criterion(
             conf.loss_type_feat_g,
@@ -185,6 +186,7 @@ def main():
     if conf.loss_type_feat_v != 'none':
         assert isinstance(model, (M.BengaliResNet34V3,
                                   M.BengaliResNet34V4,
+                                  M.BengaliResNet34AGeMV4,
                                   M.BengaliSEResNeXt50V4))
         criterion_feat_v = get_criterion(
             conf.loss_type_feat_v,
@@ -198,6 +200,7 @@ def main():
     if conf.loss_type_feat_c != 'none':
         assert isinstance(model, (M.BengaliResNet34V3,
                                   M.BengaliResNet34V4,
+                                  M.BengaliResNet34AGeMV4,
                                   M.BengaliSEResNeXt50V4))
         criterion_feat_c = get_criterion(
             conf.loss_type_feat_c,
@@ -318,6 +321,7 @@ def train(model, train_loader, val_loader,
                     logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
                 elif isinstance(model, (M.BengaliResNet34V3,
                                         M.BengaliResNet34V4,
+                                        M.BengaliResNet34AGeMV4,
                                         M.BengaliSEResNeXt50V4)):
                     (feat,
                      feat_g, logit_g,
@@ -340,6 +344,7 @@ def train(model, train_loader, val_loader,
                     logit_g, logit_v, logit_c = model(x, tg=tg, tv=tv, tc=tc)
                 elif isinstance(model, (M.BengaliResNet34V3,
                                         M.BengaliResNet34V4,
+                                        M.BengaliResNet34AGeMV4,
                                         M.BengaliSEResNeXt50V4)):
                     (feat,
                      feat_g, logit_g,
