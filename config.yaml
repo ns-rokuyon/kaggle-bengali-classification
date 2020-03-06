@@ -1,17 +1,17 @@
-run_id: run-60
+run_id: run-56-noaf
 
 data_dir: data
-fold_id: 3
+fold_id: 0
 
-arch: BengaliResNet34AGeMV4
-#arch: BengaliSEResNeXt50V4
+#arch: BengaliResNet34AGeMV4
+arch: BengaliSEResNeXt50V4
 n_channel: 3
 use_maxblurpool: True
 remove_last_stride: True
 
 n_epoch: 80
-#batch_size: 88  # SEResNeXt50
-batch_size: 128  # ResNet34
+batch_size: 88  # SEResNeXt50
+#batch_size: 128  # ResNet34
 #batch_size: 128
 #batch_size: 196
 #batch_size: 256
@@ -19,8 +19,8 @@ batch_p: 128
 batch_k: 2
 #n_iter_per_epoch: 1700
 n_iter_per_epoch: 800
-#n_low_freq_samples: 16  # SEResNeXt50
-n_low_freq_samples: 32  # ResNet34
+n_low_freq_samples: 16  # SEResNeXt50
+#n_low_freq_samples: 32  # ResNet34
 n_class_low_freq: 80
 
 #input_size: 224
@@ -37,9 +37,12 @@ loss_type_g: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_v: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_c: ce   # ce | weighted_ce | ohem | focal | reduced_focal
 
-loss_type_feat_g: af
-loss_type_feat_v: af
-loss_type_feat_c: af
+#loss_type_feat_g: af
+#loss_type_feat_v: af
+#loss_type_feat_c: af
+loss_type_feat_g: none
+loss_type_feat_v: none
+loss_type_feat_c: none
 
 feat_loss_weight: 0.25
 
