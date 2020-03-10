@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pretrainedmodels
 from torchvision.models import resnet34, resnet50
+from efficientnet_pytorch import EfficientNet
 from typing import Tuple, List
 from lib.maxblurpool import MaxBlurPool2d
 from lib.xresnet import mxresnet34, Mish
@@ -892,6 +893,58 @@ class BengaliSEResNeXt50V4(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+class BengaliEfficientNetB0V4(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        assert n_channel == 3
+        if pretrained:
+            self.backend = EfficientNet.from_pretrained('efficientnet-b0')
+        else:
+            self.backend = EfficientNet.from_name('efficientnet-b0')
+        self.multihead = MultiHeadV4(1280, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend.extract_features(x)
+
+        if self.training:
+            return self.multihead(x)
+
+        (feat, feat_g, logit_g,
+               feat_v, logit_v,
+               feat_c, logit_c) = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
+class BengaliEfficientNetB3V4(nn.Module):
+    def __init__(self,
+                 pretrained=True,
+                 pooling='gap',
+                 n_channel=1,
+                 **kwargs):
+        super().__init__()
+        assert n_channel == 3
+        if pretrained:
+            self.backend = EfficientNet.from_pretrained('efficientnet-b3')
+        else:
+            self.backend = EfficientNet.from_name('efficientnet-b3')
+        self.multihead = MultiHeadV4(1536, pooling=pooling)
+
+    def forward(self, x):
+        x = self.backend.extract_features(x)
+
+        if self.training:
+            return self.multihead(x)
+
+        (feat, feat_g, logit_g,
+               feat_v, logit_v,
+               feat_c, logit_c) = self.multihead(x)
+        return logit_g, logit_v, logit_c
+
+
 class BengaliSEResNeXt50(nn.Module):
     def __init__(self,
                  pretrained=True,
@@ -1056,6 +1109,7 @@ class BengaliSEResNeXt50NS(nn.Module):
         return logit_g, logit_v, logit_c
 
 
+
 def create_init_model(arch, **kwargs):
     if arch == 'BengaliResNet34':
         model = BengaliResNet34(**kwargs)
@@ -1069,6 +1123,10 @@ def create_init_model(arch, **kwargs):
         model = BengaliResNet34AGeMV4(**kwargs)
     elif arch == 'BengaliSEResNeXt50V4':
         model = BengaliSEResNeXt50V4(**kwargs)
+    elif arch == 'BengaliEfficientNetB0V4':
+        model = BengaliEfficientNetB0V4(**kwargs)
+    elif arch == 'BengaliEfficientNetB3V4':
+        model = BengaliEfficientNetB3V4(**kwargs)
     elif arch == 'BengaliSEResNeXt50':
         model = BengaliSEResNeXt50(**kwargs)
     elif arch == 'BengaliResNet34JPU':

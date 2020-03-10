@@ -8,6 +8,11 @@ import tqdm
 from torch.utils.data.dataloader import DataLoader
 from pathlib import Path
 from argparse import ArgumentParser
+try:
+    from apex import amp
+except ImportError:
+    print('Apex is not available')
+    amp = None
 
 import loss as L
 import model as M
@@ -66,8 +71,11 @@ def main():
                 invert_color=conf.invert_color
             )
         elif conf.augmentor_type == 'v3':
-            input_size = (conf.input_size, conf.input_size) if conf.input_size else \
-                         (SOURCE_IMAGE_HEIGHT, SOURCE_IMAGE_WIDTH)
+            if conf.input_size_tuple:
+                input_size = tuple(conf.input_size_tuple)
+            else:
+                input_size = (conf.input_size, conf.input_size) if conf.input_size else \
+                             (SOURCE_IMAGE_HEIGHT, SOURCE_IMAGE_WIDTH)
             augmentor = create_augmentor_v3(
                 input_size,
                 enable_random_morph=conf.enable_random_morph,
@@ -79,12 +87,15 @@ def main():
     else:
         augmentor = None
 
-    if conf.input_size == 0:
+    if not conf.input_size_tuple and conf.input_size == 0:
         train_transformer = create_transformer_v1(augmentor=augmentor)
         val_transformer = create_testing_transformer_v1()
         workspace.log('Input size: default')
     else:
-        input_size = (conf.input_size, conf.input_size)
+        if conf.input_size_tuple:
+            input_size = tuple(conf.input_size_tuple)
+        else:
+            input_size = (conf.input_size, conf.input_size)
         train_transformer = create_transformer_v1(input_size=input_size,
                                                   augmentor=augmentor)
         val_transformer = create_testing_transformer_v1(input_size=input_size)
@@ -149,7 +160,15 @@ def main():
                               use_maxblurpool=conf.use_maxblurpool,
                               remove_last_stride=conf.remove_last_stride,
                               n_channel=conf.n_channel)
+    if conf.weight_file:
+        pretrained_weight = torch.load(conf.weight_file, map_location='cpu')
+        result = model.load_state_dict(pretrained_weight)
+        workspace.log(f'Pretrained weights were loaded: {conf.weight_file}')
+        workspace.log(result)
+
     model = model.cuda()
+
+    sub_models = []
 
     criterion_g = get_criterion(
         conf.loss_type_g,
@@ -173,13 +192,18 @@ def main():
         assert isinstance(model, (M.BengaliResNet34V3,
                                   M.BengaliResNet34V4,
                                   M.BengaliResNet34AGeMV4,
-                                  M.BengaliSEResNeXt50V4))
+                                  M.BengaliSEResNeXt50V4,
+                                  M.BengaliEfficientNetB0V4,
+                                  M.BengaliEfficientNetB3V4))
         criterion_feat_g = get_criterion(
             conf.loss_type_feat_g,
             dim=model.multihead.head_g.dim, n_class=168,
             s=conf.af_scale_g
         )
         workspace.log(f'Loss type (fg): {conf.loss_type_feat_g}')
+        if conf.loss_type_feat_g in ('af',):
+            sub_models.append(criterion_feat_g)
+            workspace.log('Add criterion_feat_g to sub model')
     else:
         criterion_feat_g = None
 
@@ -187,13 +211,18 @@ def main():
         assert isinstance(model, (M.BengaliResNet34V3,
                                   M.BengaliResNet34V4,
                                   M.BengaliResNet34AGeMV4,
-                                  M.BengaliSEResNeXt50V4))
+                                  M.BengaliSEResNeXt50V4,
+                                  M.BengaliEfficientNetB0V4,
+                                  M.BengaliEfficientNetB3V4))
         criterion_feat_v = get_criterion(
             conf.loss_type_feat_v,
             dim=model.multihead.head_v.dim, n_class=11,
             s=conf.af_scale_v
         )
         workspace.log(f'Loss type (fv): {conf.loss_type_feat_v}')
+        if conf.loss_type_feat_v in ('af',):
+            sub_models.append(criterion_feat_v)
+            workspace.log('Add criterion_feat_v to sub model')
     else:
         criterion_feat_v = None
 
@@ -201,35 +230,58 @@ def main():
         assert isinstance(model, (M.BengaliResNet34V3,
                                   M.BengaliResNet34V4,
                                   M.BengaliResNet34AGeMV4,
-                                  M.BengaliSEResNeXt50V4))
+                                  M.BengaliSEResNeXt50V4,
+                                  M.BengaliEfficientNetB0V4,
+                                  M.BengaliEfficientNetB3V4))
         criterion_feat_c = get_criterion(
             conf.loss_type_feat_c,
             dim=model.multihead.head_c.dim, n_class=7,
             s=conf.af_scale_c
         )
         workspace.log(f'Loss type (fc): {conf.loss_type_feat_c}')
+        if conf.loss_type_feat_c in ('af',):
+            sub_models.append(criterion_feat_c)
+            workspace.log('Add criterion_feat_c to sub model')
     else:
         criterion_feat_c = None
 
+    parameters = [{'params': model.parameters()}] + \
+                 [{'params': sub_model.parameters()} for sub_model in sub_models]
+
     if conf.optimizer_type == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(),
+        optimizer = torch.optim.Adam(parameters,
                                      lr=conf.lr)
     elif conf.optimizer_type == 'sgd':
-        optimizer = torch.optim.SGD(model.parameters(),
+        optimizer = torch.optim.SGD(parameters,
                                     lr=conf.lr,
                                     momentum=0.9,
                                     weight_decay=1e-4)
     elif conf.optimizer_type == 'ranger':
-        optimizer = Ranger(model.parameters(),
+        optimizer = Ranger(parameters,
                            lr=conf.lr,
                            weight_decay=1e-4)
     elif conf.optimizer_type == 'radam':
-        optimizer = RAdam(model.parameters(),
+        optimizer = RAdam(parameters,
                           lr=conf.lr,
                           weight_decay=1e-4)
     else:
         raise ValueError(conf.optimizer_type)
     workspace.log(f'Optimizer type: {conf.optimizer_type}')
+
+    if conf.use_apex:
+        workspace.log('Apex initialization')
+        _models, optimizer = amp.initialize([model] + sub_models, optimizer, opt_level=conf.apex_opt_level)
+        if len(_models) == 1:
+            model = _models[0]
+        else:
+            model = _models[0]
+            criterion_feat_g = _models[1]
+            criterion_feat_v = _models[2]
+            criterion_feat_c = _models[3]
+        workspace.log('Initialized by Apex')
+        workspace.log(f'{optimizer.__class__.__name__}')
+        for m in _models:
+            workspace.log(f'{m.__class__.__name__}')
 
     if conf.scheduler_type == 'cosanl':
         scheduler = CosineLRWithRestarts(
@@ -257,7 +309,8 @@ def main():
           n_epoch=conf.n_epoch,
           cutmix_prob=conf.cutmix_prob,
           freeze_bn_epochs=conf.freeze_bn_epochs,
-          feat_loss_weight=conf.feat_loss_weight)
+          feat_loss_weight=conf.feat_loss_weight,
+          use_apex=conf.use_apex)
 
 
 def train(model, train_loader, val_loader,
@@ -273,7 +326,8 @@ def train(model, train_loader, val_loader,
           n_epoch=30,
           cutmix_prob=0,
           freeze_bn_epochs=None,
-          feat_loss_weight=1.0):
+          feat_loss_weight=1.0,
+          use_apex=False):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
     workspace.plot_score('val/score', score, 0)
@@ -322,7 +376,9 @@ def train(model, train_loader, val_loader,
                 elif isinstance(model, (M.BengaliResNet34V3,
                                         M.BengaliResNet34V4,
                                         M.BengaliResNet34AGeMV4,
-                                        M.BengaliSEResNeXt50V4)):
+                                        M.BengaliSEResNeXt50V4,
+                                        M.BengaliEfficientNetB0V4,
+                                        M.BengaliEfficientNetB3V4)):
                     (feat,
                      feat_g, logit_g,
                      feat_v, logit_v,
@@ -345,7 +401,9 @@ def train(model, train_loader, val_loader,
                 elif isinstance(model, (M.BengaliResNet34V3,
                                         M.BengaliResNet34V4,
                                         M.BengaliResNet34AGeMV4,
-                                        M.BengaliSEResNeXt50V4)):
+                                        M.BengaliSEResNeXt50V4,
+                                        M.BengaliEfficientNetB0V4,
+                                        M.BengaliEfficientNetB3V4)):
                     (feat,
                      feat_g, logit_g,
                      feat_v, logit_v,
@@ -385,7 +443,12 @@ def train(model, train_loader, val_loader,
                                      global_step)
 
             optimizer.zero_grad()
-            loss.backward()
+
+            if use_apex:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
             optimizer.step()
 
             if isinstance(scheduler, CosineLRWithRestarts):
@@ -395,8 +458,22 @@ def train(model, train_loader, val_loader,
 
         workspace.log(f'Score={score}', epoch=epoch)
         workspace.plot_score('val/score', score, epoch)
+        saved = workspace.save_bestmodel(model, epoch, score)
 
-        workspace.save_bestmodel(model, epoch, score)
+        if saved:
+            checkpoint = {
+                'optimizer': optimizer.state_dict(),
+                'amp': None if amp is None else amp.state_dict()
+            }
+            if scheduler is not None:
+                checkpoint['scheduler'] = scheduler.state_dict()
+            if isinstance(criterion_feat_g, nn.Module):
+                checkpoint['criterion_feat_g'] = criterion_feat_g.state_dict()
+            if isinstance(criterion_feat_v, nn.Module):
+                checkpoint['criterion_feat_v'] = criterion_feat_v.state_dict()
+            if isinstance(criterion_feat_c, nn.Module):
+                checkpoint['criterion_feat_c'] = criterion_feat_c.state_dict()
+            workspace.save_checkpoint(epoch, name='best', **checkpoint)
     workspace.save_model(model, n_epoch)
 
 
