@@ -26,6 +26,7 @@ pytorch-metric-learning = "*"
 albumentations = "*"
 fastai = "*"
 pytorch-toolbelt = "*"
+efficientnet-pytorch = "*"
 
 [requires]
 python_version = "3.7"
