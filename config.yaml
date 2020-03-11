@@ -1,43 +1,36 @@
-run_id: run-73
+run_id: run-91
 
 data_dir: data
 fold_id: 0
 
-use_apex: True
-apex_opt_level: O1
-
-#arch: BengaliResNet34AGeMV4
+arch: BengaliResNet34V4
 #arch: BengaliSEResNeXt50V4
-arch: BengaliEfficientNetB3V4
 n_channel: 3
 use_maxblurpool: True
 remove_last_stride: True
 
-n_epoch: 80
-batch_size: 88  # EfficientNet (128x128)
-#batch_size: 88  # SEResNeXt50
-#batch_size: 128  # ResNet34
+n_epoch: 100
+#batch_size: 64  # SEResNeXt50
+batch_size: 128  # ResNet34
 #batch_size: 128
 #batch_size: 196
 #batch_size: 256
-batch_p: 128
+batch_p: 32
 batch_k: 2
-#n_iter_per_epoch: 1700
-n_iter_per_epoch: 800
-n_low_freq_samples: 8  # EfficentNet
-#n_low_freq_samples: 16  # SEResNeXt50
-#n_low_freq_samples: 32  # ResNet34
+n_iter_per_epoch: 1700
+#n_iter_per_epoch: 800
+n_low_freq_samples: 8
 n_class_low_freq: 80
 
-input_size: 224
-#input_size: 128
+#input_size: 224
+input_size: 128
 
 input_size_tuple:
   - 137
   - 236
 
-lr: 0.0002
-#lr: 0.001
+#lr: 0.0002
+lr: 0.001
 #lr: 0.01
 
 #freeze_bn_epochs:
@@ -48,30 +41,29 @@ loss_type_g: ohem   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_v: ohem   # ce | weighted_ce | ohem | focal | reduced_focal
 loss_type_c: ohem   # ce | weighted_ce | ohem | focal | reduced_focal
 
-#loss_type_feat_g: af
-#loss_type_feat_v: af
-#loss_type_feat_c: af
-loss_type_feat_g: none
-loss_type_feat_v: none
-loss_type_feat_c: none
+loss_type_feat_g: af
+loss_type_feat_v: af
+loss_type_feat_c: af
 
-#feat_loss_weight: 0.25
-feat_loss_weight: 1.0
+feat_loss_weight: 0.1
 
 pooling_type: gemp   # gap | gemp
 optimizer_type: radam   # sgd | adam | ranger | radam
-scheduler_type: cosanl   # cosanl | rop
+scheduler_type: rop   # cosanl | rop
 augmentor_type: v3    # v1 | v2 | v3
 sampler_type: random+append  # random | random+append | pk
 
 use_augmentor: true
-cutmix_prob: 0.5
+cutmix_prob: 0.25
+mixup_prob: 0.25
 feat_dim: 128
 
-#rop_patience: 4
-rop_patience: 2
-rop_factor: 0.5
-#rop_factor: 0.1
+rop_patience: 4
+#rop_patience: 2
+#rop_factor: 0.5
+rop_factor: 0.1
+
+cosanl_t_mult: 2
 
 enable_random_morph: True
 invert_color: True

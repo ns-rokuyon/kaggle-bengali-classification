@@ -34,6 +34,7 @@ from loss import get_criterion
 from sampler import PKSampler, LowFreqSampleMixinBatchSampler
 from config import Config
 from lib.cutmix import cutmix, cutmix_criterion
+from lib.mixup import mixup, mixup_criterion
 
 
 cv2.setNumThreads(0)
@@ -286,12 +287,13 @@ def main():
     if conf.scheduler_type == 'cosanl':
         scheduler = CosineLRWithRestarts(
             optimizer, conf.batch_size, len(train_dataset),
-            restart_period=10, t_mult=1.0
+            restart_period=10, t_mult=conf.cosanl_t_mult
         )
+        workspace.log(f't_mult={scheduler.t_mult}')
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, patience=conf.rop_patience, mode='max',
-            factor=conf.rop_factor, min_lr=1e-7, verbose=True
+            factor=conf.rop_factor, min_lr=1e-6, verbose=True
         )
     else:
         raise ValueError(conf.scheduler_type)
@@ -308,6 +310,7 @@ def main():
           scheduler=scheduler,
           n_epoch=conf.n_epoch,
           cutmix_prob=conf.cutmix_prob,
+          mixup_prob=conf.mixup_prob,
           freeze_bn_epochs=conf.freeze_bn_epochs,
           feat_loss_weight=conf.feat_loss_weight,
           use_apex=conf.use_apex)
@@ -325,6 +328,7 @@ def train(model, train_loader, val_loader,
           scheduler=None,
           n_epoch=30,
           cutmix_prob=0,
+          mixup_prob=0,
           freeze_bn_epochs=None,
           feat_loss_weight=1.0,
           use_apex=False):
@@ -356,7 +360,15 @@ def train(model, train_loader, val_loader,
                               f'tg={tg.size()}, tv={tv.size()}, tc={tc.size()}')
 
             r = np.random.rand(1)
-            use_cutmix = r < cutmix_prob
+            if r < cutmix_prob:
+                use_cutmix = True
+                use_mixup = False
+            elif r < cutmix_prob + mixup_prob:
+                use_cutmix = False
+                use_mixup = True
+            else:
+                use_cutmix = False
+                use_mixup = False
 
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
@@ -365,8 +377,14 @@ def train(model, train_loader, val_loader,
             loss_feat_v = 0
             loss_feat_c = 0
 
-            if use_cutmix:
-                x, rand_index, lam = cutmix(x, beta=1.0)
+            if use_cutmix or use_mixup:
+                if use_cutmix:
+                    x, rand_index, lam = cutmix(x, beta=1.0)
+                    mix_criterion = cutmix_criterion
+                elif use_mixup:
+                    x, rand_index, lam = mixup(x, alpha=1.0)
+                    mix_criterion = mixup_criterion
+
                 tga, tgb = tg, tg[rand_index]
                 tva, tvb = tv, tv[rand_index]
                 tca, tcb = tc, tc[rand_index]
@@ -386,13 +404,13 @@ def train(model, train_loader, val_loader,
                 else:
                     logit_g, logit_v, logit_c = model(x)
 
-                loss_g = cutmix_criterion(
+                loss_g = mix_criterion(
                     logit_g, tga, tgb, lam, criterion=criterion_g
                 )
-                loss_v = cutmix_criterion(
+                loss_v = mix_criterion(
                     logit_v, tva, tvb, lam, criterion=criterion_v
                 )
-                loss_c = cutmix_criterion(
+                loss_c = mix_criterion(
                     logit_c, tca, tcb, lam, criterion=criterion_c
                 )
             else:
@@ -430,12 +448,16 @@ def train(model, train_loader, val_loader,
                 loss_v = criterion_v(logit_v, tv)
                 loss_c = criterion_c(logit_c, tc)
 
-            loss = loss_g + loss_v + loss_c + feat_loss_weight * (
-                loss_feat_g + loss_feat_v + loss_feat_c)
+            loss_feat = loss_feat_g + loss_feat_v + loss_feat_c
+            loss = loss_g + loss_v + loss_c + feat_loss_weight * loss_feat
 
             if global_step % 20 == 0:
-                workspace.log(f'Iteration={iteration}, Loss={loss}',
-                              epoch=epoch)
+                if loss_feat == 0:
+                    workspace.log(f'Iteration={iteration}, Loss={loss}',
+                                  epoch=epoch)
+                else:
+                    workspace.log(f'Iteration={iteration}, Loss={loss}, FeatLoss={loss_feat}',
+                                  epoch=epoch)
                 workspace.plot_score('train/loss', float(loss.item()),
                                      global_step)
                 workspace.plot_score('train/lr',
@@ -463,7 +485,7 @@ def train(model, train_loader, val_loader,
         if saved:
             checkpoint = {
                 'optimizer': optimizer.state_dict(),
-                'amp': None if amp is None else amp.state_dict()
+                'amp': None if not use_apex else amp.state_dict()
             }
             if scheduler is not None:
                 checkpoint['scheduler'] = scheduler.state_dict()

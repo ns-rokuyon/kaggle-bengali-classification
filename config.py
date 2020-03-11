@@ -38,9 +38,11 @@ defs = {
     'sampler_type': (str, 'random'),    # random | pk
     'use_augmentor': (bool, False),
     'cutmix_prob': (float, 0.0),
+    'mixup_prob': (float, 0.0),
     'feat_dim': (int, 64),
     'rop_patience': (int, 3),
     'rop_factor': (float, 0.1),
+    'cosanl_t_mult': (float, 1.0),
     'enable_random_morph': (bool, False),
     'invert_color': (bool, False),
     'af_scale_g': (float, 8),
