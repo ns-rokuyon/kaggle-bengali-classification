@@ -40,6 +40,20 @@ class OHEMCrossEntropyLoss(nn.Module):
         loss, _ = loss.topk(k=int(self.rate * batch_size))
         return torch.mean(loss)
 
+    def adjust_rate(self, epoch):
+        current_rate = self.rate
+        if epoch == 1:
+            self.rate = 1.0
+        elif epoch == 21:
+            self.rate = 0.8
+        elif epoch == 41:
+            self.rate = 0.7
+        elif epoch == 61:
+            self.rate = 0.6
+        elif epoch == 81:
+            self.rate = 0.5
+        return current_rate, self.rate
+
 
 class NormSoftmaxLoss(nn.Module):
     """http://github.com/azgo14/classification_metric_learning

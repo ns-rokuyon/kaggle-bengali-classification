@@ -313,7 +313,8 @@ def main():
           mixup_prob=conf.mixup_prob,
           freeze_bn_epochs=conf.freeze_bn_epochs,
           feat_loss_weight=conf.feat_loss_weight,
-          use_apex=conf.use_apex)
+          use_apex=conf.use_apex,
+          decrease_ohem_rate=conf.decrease_ohem_rate)
 
 
 def train(model, train_loader, val_loader,
@@ -331,7 +332,8 @@ def train(model, train_loader, val_loader,
           mixup_prob=0,
           freeze_bn_epochs=None,
           feat_loss_weight=1.0,
-          use_apex=False):
+          use_apex=False,
+          decrease_ohem_rate=False):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
     workspace.plot_score('val/score', score, 0)
@@ -351,6 +353,17 @@ def train(model, train_loader, val_loader,
             else:
                 scheduler.step()
             workspace.log(f'Scheduler.step()', epoch=epoch)
+
+        if decrease_ohem_rate:
+            if isinstance(criterion_g, L.OHEMCrossEntropyLoss):
+                r_before, r_after = criterion_g.adjust_rate(epoch)
+                workspace.log(f'OHEM(g).rate: {r_before} -> {r_after}')
+            if isinstance(criterion_v, L.OHEMCrossEntropyLoss):
+                r_before, r_after = criterion_v.adjust_rate(epoch)
+                workspace.log(f'OHEM(v).rate: {r_before} -> {r_after}')
+            if isinstance(criterion_c, L.OHEMCrossEntropyLoss):
+                r_before, r_after = criterion_c.adjust_rate(epoch)
+                workspace.log(f'OHEM(g).rate: {r_before} -> {r_after}')
 
         for iteration, (x, tg, tv, tc) in enumerate(train_loader):
             global_step += 1

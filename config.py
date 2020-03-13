@@ -45,6 +45,7 @@ defs = {
     'cosanl_t_mult': (float, 1.0),
     'enable_random_morph': (bool, False),
     'invert_color': (bool, False),
+    'decrease_ohem_rate': (bool, False),
     'af_scale_g': (float, 8),
     'af_scale_v': (float, 3),
     'af_scale_c': (float, 3)
