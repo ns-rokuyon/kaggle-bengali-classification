@@ -43,12 +43,16 @@ defs = {
     'rop_patience': (int, 3),
     'rop_factor': (float, 0.1),
     'cosanl_t_mult': (float, 1.0),
+    'cosanl_restart_period': (int, 10),
     'enable_random_morph': (bool, False),
     'invert_color': (bool, False),
     'decrease_ohem_rate': (bool, False),
+    'ohem_rate': (float, 0.7),
     'af_scale_g': (float, 8),
     'af_scale_v': (float, 3),
-    'af_scale_c': (float, 3)
+    'af_scale_c': (float, 3),
+    'use_grapheme_code': (bool, False),
+    'final_ft': (bool, False)
 }
 
 

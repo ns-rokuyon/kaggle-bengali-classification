@@ -15,6 +15,7 @@ def bengali_dataset(data_dir, fold_id=0,
                     val_transformer=None,
                     invert_color=False,
                     n_channel=1,
+                    use_grapheme_code=False,
                     logger=None):
     """Load Bengali dataset (train, val)
     """
@@ -27,6 +28,14 @@ def bengali_dataset(data_dir, fold_id=0,
     if logger:
         logger.info('load train_csv ...')
     df = pd.read_csv(train_csv)
+
+    S = {}
+    def to_code(x):
+        if x in S:
+            return S[x]
+        S[x] = len(S)
+        return S[x]
+    df['grapheme_code'] = df.grapheme.apply(to_code)
 
     if logger:
         logger.info('load image_dfs ...')
@@ -50,23 +59,27 @@ def bengali_dataset(data_dir, fold_id=0,
     train_dataset = BengaliSubsetDataset(df, image_ids, images, train_ids,
                                          transformer=train_transformer,
                                          invert_color=invert_color,
-                                         n_channel=n_channel)
+                                         n_channel=n_channel,
+                                         use_grapheme_code=use_grapheme_code)
     val_dataset = BengaliSubsetDataset(df, image_ids, images, val_ids,
                                        transformer=val_transformer,
                                        invert_color=invert_color,
-                                       n_channel=n_channel)
+                                       n_channel=n_channel,
+                                       use_grapheme_code=False)
     return train_dataset, val_dataset
 
 
 class BengaliDataset(Dataset):
     def __init__(self, df, image_ids, images,
-                 transformer=None, invert_color=False, n_channel=1):
+                 transformer=None, invert_color=False, n_channel=1,
+                 use_grapheme_code=False):
         self.df = df
         self.images = images
         self.ids = image_ids
         self.transformer = transformer
         self.invert_color = invert_color
         self.n_channel = n_channel
+        self.use_grapheme_code = use_grapheme_code
         assert len(self.df) == len(self.images)
 
     def __len__(self):
@@ -87,6 +100,9 @@ class BengaliDataset(Dataset):
         grapheme = int(row.grapheme_root)
         vowel = int(row.vowel_diacritic)
         consonant = int(row.consonant_diacritic)
+        if self.use_grapheme_code:
+            grapheme_code = int(row.grapheme_code)
+            return (grapheme, vowel, consonant, grapheme_code)
         return (grapheme, vowel, consonant)
 
 
@@ -94,9 +110,11 @@ class BengaliSubsetDataset(BengaliDataset):
     def __init__(self, df, image_ids, images, active_ids,
                  transformer=None,
                  invert_color=False,
-                 n_channel=1):
+                 n_channel=1,
+                 use_grapheme_code=False):
         super().__init__(df, image_ids, images,
-                         transformer=transformer, invert_color=invert_color, n_channel=n_channel)
+                         transformer=transformer, invert_color=invert_color,
+                         n_channel=n_channel, use_grapheme_code=use_grapheme_code)
         self.active_ids = active_ids    # i (All) -> j (Subset)
         self.j2i_maps = {}              # j (Subset) -> i (All)
         self.low_freq_groups = {}

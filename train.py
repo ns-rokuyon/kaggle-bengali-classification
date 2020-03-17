@@ -108,6 +108,7 @@ def main():
                                                  val_transformer=val_transformer,
                                                  invert_color=conf.invert_color,
                                                  n_channel=conf.n_channel,
+                                                 use_grapheme_code=conf.use_grapheme_code,
                                                  logger=workspace.logger)
     workspace.log(f'#train={len(train_dataset)}, #val={len(val_dataset)}')
     train_dataset.set_low_freq_groups(n_class=conf.n_class_low_freq)
@@ -173,19 +174,22 @@ def main():
 
     criterion_g = get_criterion(
         conf.loss_type_g,
-        weight=train_dataset.get_class_weights_g()
+        weight=train_dataset.get_class_weights_g(),
+        rate=conf.ohem_rate
     )
     workspace.log(f'Loss type (g): {conf.loss_type_g}')
 
     criterion_v = get_criterion(
         conf.loss_type_v,
-        weights=train_dataset.get_class_weights_v()
+        weights=train_dataset.get_class_weights_v(),
+        rate=conf.ohem_rate
     )
     workspace.log(f'Loss type (v): {conf.loss_type_v}')
 
     criterion_c = get_criterion(
         conf.loss_type_c,
-        weights=train_dataset.get_class_weights_c()
+        weights=train_dataset.get_class_weights_c(),
+        rate=conf.ohem_rate
     )
     workspace.log(f'Loss type (c): {conf.loss_type_c}')
 
@@ -246,6 +250,20 @@ def main():
     else:
         criterion_feat_c = None
 
+    if conf.use_grapheme_code:
+        workspace.log('Use grapheme code classifier')
+        grapheme_classifier = nn.Sequential(
+            nn.BatchNorm1d(168 + 11 + 7),
+            nn.Linear(168 + 11 + 7, 1295)
+        )
+        grapheme_classifier = grapheme_classifier.cuda()
+        grapheme_classifier.train()
+        sub_models.append(grapheme_classifier)
+        criterion_grapheme = L.OHEMCrossEntropyLoss().cuda()
+    else:
+        grapheme_classifier = None
+        criterion_grapheme = None
+
     parameters = [{'params': model.parameters()}] + \
                  [{'params': sub_model.parameters()} for sub_model in sub_models]
 
@@ -287,8 +305,10 @@ def main():
     if conf.scheduler_type == 'cosanl':
         scheduler = CosineLRWithRestarts(
             optimizer, conf.batch_size, len(train_dataset),
-            restart_period=10, t_mult=conf.cosanl_t_mult
+            restart_period=conf.cosanl_restart_period,
+            t_mult=conf.cosanl_t_mult
         )
+        workspace.log(f'restart_period={scheduler.restart_period}')
         workspace.log(f't_mult={scheduler.t_mult}')
     elif conf.scheduler_type == 'rop':
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -314,7 +334,11 @@ def main():
           freeze_bn_epochs=conf.freeze_bn_epochs,
           feat_loss_weight=conf.feat_loss_weight,
           use_apex=conf.use_apex,
-          decrease_ohem_rate=conf.decrease_ohem_rate)
+          decrease_ohem_rate=conf.decrease_ohem_rate,
+          use_grapheme_code=conf.use_grapheme_code,
+          grapheme_classifier=grapheme_classifier,
+          criterion_grapheme=criterion_grapheme,
+          final_ft=conf.final_ft)
 
 
 def train(model, train_loader, val_loader,
@@ -333,7 +357,11 @@ def train(model, train_loader, val_loader,
           freeze_bn_epochs=None,
           feat_loss_weight=1.0,
           use_apex=False,
-          decrease_ohem_rate=False):
+          decrease_ohem_rate=False,
+          use_grapheme_code=False,
+          grapheme_classifier=None,
+          criterion_grapheme=None,
+          final_ft=False):
     score = evaluate(model, val_loader)
     workspace.log(f'Score={score}', epoch=0)
     workspace.plot_score('val/score', score, 0)
@@ -341,8 +369,16 @@ def train(model, train_loader, val_loader,
     freeze_bn_epochs = freeze_bn_epochs or []
     global_step = -1
 
+    if final_ft:
+        workspace.log('Freeze backbone')
+        M.freeze_backbone(model)
+        M.freeze_multihead(model)
+
     for epoch in range(1, n_epoch + 1):
         model.train()
+        if grapheme_classifier is not None:
+            grapheme_classifier.train()
+
         if epoch in freeze_bn_epochs:
             model.apply(set_batchnorm_eval)
             workspace.log(f'Freeze BN', epoch=epoch)
@@ -363,10 +399,26 @@ def train(model, train_loader, val_loader,
                 workspace.log(f'OHEM(v).rate: {r_before} -> {r_after}')
             if isinstance(criterion_c, L.OHEMCrossEntropyLoss):
                 r_before, r_after = criterion_c.adjust_rate(epoch)
-                workspace.log(f'OHEM(g).rate: {r_before} -> {r_after}')
+                workspace.log(f'OHEM(c).rate: {r_before} -> {r_after}')
+            if isinstance(criterion_grapheme, L.OHEMCrossEntropyLoss):
+                r_before, r_after = criterion_grapheme.adjust_rate(epoch)
+                workspace.log(f'OHEM(grapheme).rate: {r_before} -> {r_after}')
+        else:
+            if isinstance(criterion_g, L.OHEMCrossEntropyLoss):
+                workspace.log(f'OHEM(g).rate: {criterion_g.rate}')
+            if isinstance(criterion_v, L.OHEMCrossEntropyLoss):
+                workspace.log(f'OHEM(v).rate: {criterion_v.rate}')
+            if isinstance(criterion_c, L.OHEMCrossEntropyLoss):
+                workspace.log(f'OHEM(c).rate: {criterion_c.rate}')
+            if isinstance(criterion_grapheme, L.OHEMCrossEntropyLoss):
+                workspace.log(f'OHEM(grapheme).rate: {criterion_grapheme.rate}')
 
-        for iteration, (x, tg, tv, tc) in enumerate(train_loader):
+        for iteration, data_tuple in enumerate(train_loader):
             global_step += 1
+            if use_grapheme_code:
+                (x, tg, tv, tc, tgrapheme) = data_tuple
+            else:
+                (x, tg, tv, tc) = data_tuple
 
             if global_step == 0:
                 workspace.log(f'Check tensor size: x={x.size()}, '
@@ -385,10 +437,14 @@ def train(model, train_loader, val_loader,
 
             x = x.cuda()
             (tg, tv, tc) = (tg.cuda(), tv.cuda(), tc.cuda())
+            
+            if use_grapheme_code:
+                tgrapheme = tgrapheme.cuda()
 
             loss_feat_g = 0
             loss_feat_v = 0
             loss_feat_c = 0
+            loss_grapheme = 0
 
             if use_cutmix or use_mixup:
                 if use_cutmix:
@@ -461,16 +517,30 @@ def train(model, train_loader, val_loader,
                 loss_v = criterion_v(logit_v, tv)
                 loss_c = criterion_c(logit_c, tc)
 
+                if use_grapheme_code:
+                    logit_grapheme = grapheme_classifier(
+                        torch.cat([logit_g, logit_v, logit_c], dim=1)
+                    )
+                    loss_grapheme = criterion_grapheme(logit_grapheme, tgrapheme)
+
             loss_feat = loss_feat_g + loss_feat_v + loss_feat_c
-            loss = loss_g + loss_v + loss_c + feat_loss_weight * loss_feat
+            loss = loss_g + loss_v + loss_c + loss_grapheme + feat_loss_weight * loss_feat
 
             if global_step % 20 == 0:
                 if loss_feat == 0:
-                    workspace.log(f'Iteration={iteration}, Loss={loss}',
-                                  epoch=epoch)
+                    if loss_grapheme == 0:
+                        workspace.log(f'Iteration={iteration}, Loss={loss}',
+                                      epoch=epoch)
+                    else:
+                        workspace.log(f'Iteration={iteration}, Loss={loss}, LossGrapheme={loss_grapheme}',
+                                      epoch=epoch)
                 else:
-                    workspace.log(f'Iteration={iteration}, Loss={loss}, FeatLoss={loss_feat}',
-                                  epoch=epoch)
+                    if loss_grapheme == 0:
+                        workspace.log(f'Iteration={iteration}, Loss={loss}, FeatLoss={loss_feat}',
+                                      epoch=epoch)
+                    else:
+                        workspace.log(f'Iteration={iteration}, Loss={loss}, LossGrapheme={loss_grapheme}, FeatLoss={loss_feat}',
+                                      epoch=epoch)
                 workspace.plot_score('train/loss', float(loss.item()),
                                      global_step)
                 workspace.plot_score('train/lr',

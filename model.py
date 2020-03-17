@@ -104,6 +104,34 @@ def set_batchnorm_eval(module):
         module.eval()
 
 
+def freeze_backbone(model):
+    for name, param in model.named_parameters():
+        if name.startswith('backbone') or name.startswith('backend'):
+            param.requires_grad = False
+        else:
+            param.requires_grad = True
+        print(f'{name}: {param.requires_grad}')
+
+
+def freeze_multihead(model):
+    for name, param in model.named_parameters():
+        if name.startswith('multihead.pool') or \
+           name.startswith('multihead.bn') or \
+           name.startswith('multihead.head_g.features') or \
+           name.startswith('multihead.head_v.features') or \
+           name.startswith('multihead.head_c.features'):
+            param.requires_grad = False
+        else:
+            pass
+        print(f'{name}: {param.requires_grad}')
+
+
+def unfreeze(model):
+    for name, param in model.named_parameters():
+        param.requires_grad = True
+        print(f'{name}: {param.requires_grad}')
+
+
 def weights_init_kaiming(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
